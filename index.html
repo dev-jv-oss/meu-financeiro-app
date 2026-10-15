@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a2335" />
+  <meta name="description" content="Assistente financeiro pessoal — versão local de testes." />
+  <meta name="robots" content="noindex, nofollow, noarchive" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; connect-src 'self'" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon-192.png" type="image/png" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <link rel="stylesheet" href="./styles.css" />
+  <title>Meu Financeiro · PWA</title>
+</head>
+<body>
+ <div id="app" class="app">
+   <header class="topbar">
+    <div class="brand"><div class="brandmark" aria-hidden="true">◈</div><div><div class="brandname">meu<span>financeiro</span></div><div class="brandtag">Seu dinheiro, com clareza.</div></div></div>
+    <div class="topactions"><span id="net-status" class="connection"><span class="dot"></span> Modo local</span><button id="btn-settings" class="iconbtn" type="button" aria-label="Ajustes">⚙</button></div>
+   </header>
+   <main id="main" class="main"></main>
+   <nav class="bottomnav" aria-label="Navegação principal">
+    <button type="button" class="navitem selected" data-route="inicio"><span class="navicon">⌂</span><span>Início</span></button>
+    <button type="button" class="navitem" data-route="registrar"><span class="navicon">＋</span><span>Registrar</span></button>
+    <button type="button" class="navitem" data-route="consultar"><span class="navicon">◷</span><span>Consultar</span></button>
+    <button type="button" class="navitem" data-route="rascunhos"><span class="navicon">▤</span><span>Rascunhos</span></button>
+   </nav>
+   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+ </div>
+ <script type="module" src="./app.js"></script>
+</body>
+</html>
