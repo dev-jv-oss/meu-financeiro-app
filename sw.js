@@ -1,7 +1,7 @@
-/* Meu Financeiro 1.3 — same origin, versioned cache, offline-safe navigation. */
-const CACHE='meu-financeiro-pwa-v1.3.0-final-2';
+/* Meu Financeiro 1.4 — same origin, versioned cache, offline-safe navigation. */
+const CACHE='meu-financeiro-pwa-v1.5.0';
 const ROOT=new URL('./',self.location.href);
-const CORE=['./','./index.html','./styles.css','./app.js','./parser.mjs','./operacoes.mjs','./catalogo.mjs','./manifest.webmanifest','./icons/logo-mark.svg','./icons/icon-192.png','./icons/icon-512.png','./icons/icon-maskable-192.png','./icons/icon-maskable-512.png','./icons/icon-180.png'];
+const CORE=['./','./index.html','./styles.css','./app.js','./parser.mjs','./operacoes.mjs','./catalogo.mjs','./rendimentos.mjs','./manifest.webmanifest','./icons/logo-mark.svg','./icons/icon-192.png','./icons/icon-512.png','./icons/icon-maskable-192.png','./icons/icon-maskable-512.png','./icons/icon-180.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(async keys=>{for(const k of keys)if(k.startsWith('meu-financeiro-pwa-')&&k!==CACHE)await caches.delete(k);await self.clients.claim()})));
 self.addEventListener('fetch',e=>{

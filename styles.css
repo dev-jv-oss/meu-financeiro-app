@@ -43,3 +43,14 @@
 .asset-section{padding:16px}
 @media (max-width:370px){.balance-panel summary{padding:10px;min-height:94px}.balance-panel summary strong{font-size:15px}.asset-line strong{font-size:12px}.hero-chip{font-size:10px}.balance-links .mini-link{font-size:11px}}
 @media (min-width:720px){.balance-panel[open]{grid-column:auto}.balance-panel summary{min-height:88px}.balance-panel summary strong{font-size:24px}}
+
+/* v1.4 — ações equilibradas e foco acessível */
+.quickgrid>.quick:last-child:nth-child(odd){grid-column:span 2;}
+.backup-import{display:inline-flex;align-items:center;justify-content:center;cursor:pointer;}
+.backup-import:focus-within{outline:3px solid #80d5c2;outline-offset:3px;}
+@media(max-width:370px){.quickgrid>.quick:last-child:nth-child(odd){min-height:99px;}}
+
+/* v1.5: área de projeção e gerenciamento de aportes */
+.finance-conditions {margin-top:16px;padding:15px;background:var(--surface-soft,#f5f9f9);border-radius:17px;border:1px solid rgba(13,99,98,.14)}
+.checkline {display:flex;align-items:center;gap:10px;padding:10px 4px;font-size:.9rem;font-weight:600;cursor:pointer}.checkline input{width:18px;height:18px;accent-color:#047e75}
+.valuation-details {display:grid;grid-template-columns:1fr;gap:7px;margin:16px 0 9px;padding:14px;border:1px solid #d7e6e5;border-radius:13px;background:#f4fafa}.valuation-details>div{display:flex;gap:10px;justify-content:space-between;align-items:start;font-size:.86rem}.valuation-details>div span{color:#52646b}.valuation-details>div b{text-align:right}.lot-management{margin-top:18px;border-top:1px solid #d8e5e5;padding-top:16px}.lot-management h4{margin:0 0 6px}.lot-management .lot-form{margin-top:12px}.lot-line{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid #dde6e6}.asset-position{display:flex;align-items:end;flex-direction:column;gap:4px}.asset-position small{font-size:.72rem;color:#586e73}.read-only{background:#f5f8f8;color:#34434b}.draft-acts{display:flex;flex-wrap:wrap;gap:8px}.draft-acts .btn{flex:1 1 90px}.asset-manager details{max-width:100%;overflow-wrap:anywhere}
