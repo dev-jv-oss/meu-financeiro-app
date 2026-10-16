@@ -1,6 +1,6 @@
 import {interpret,money,norm,round2} from './parser.mjs';
-import {makeDraft,TYPES,ACCOUNTS,POCKETS,EXPENSE_CATS,INCOME_CATS,METHODS,INVESTMENTS,BANKS} from './operacoes.mjs';
-const VERSION='1.1.0-local';
+import {makeDraft,TYPES,ACCOUNT_OPTIONS,OTHER_ACCOUNT,POCKETS,EXPENSE_CATS,INCOME_CATS,METHODS,INVESTMENTS,BANKS,OTHER_BANK,formatCentavos} from './operacoes.mjs';
+const VERSION='1.2.0-local';
 const KEY='meu-financeiro-pwa-local-v1';
 const main=document.querySelector('#main');
 const toastEl=document.querySelector('#toast');
@@ -48,6 +48,22 @@ function register(){
 }
 function optSelect(name,values,val='',caption='Selecione'){return sel(name,values.map(x=>[x,x]),val,caption)}
 function fieldSelect(title,name,opts,value='',placeholder='Selecione'){return `<div class="field"><label for="quick-${name}">${esc(title)}</label>${sel(name,opts.map(x=>Array.isArray(x)?x:[x,x]),value,placeholder).replace(`name="${name}"`,`id="quick-${name}" name="${name}"`)}</div>`}
+function otherField(name,label){return `<div class="field conditional-other is-hidden" data-other-for="${name}"><label for="quick-${name}-name">${esc(label)}</label><input id="quick-${name}-name" class="input" name="${name}Name" maxlength="80" autocomplete="off" placeholder="Digite o nome" disabled></div>`}
+function accountField(label,name,options=ACCOUNT_OPTIONS){return fieldSelect(label,name,options)+otherField(name,'Nome do outro banco')}
+function syncQuickConditional(){
+ const form=document.querySelector('#quick-form');if(!form)return;
+ for(const wrapper of form.querySelectorAll('[data-other-for]')){
+  const field=wrapper.dataset.otherFor;
+  const select=form.elements.namedItem(field),extra=wrapper.querySelector('input');
+  const visible=select && select.value === (field==='bank'?OTHER_BANK:OTHER_ACCOUNT);
+  wrapper.classList.toggle('is-hidden',!visible); extra.disabled=!visible;
+ }
+ const account=form.elements.namedItem('account');
+ const cash=!!account&&account.value==='Dinheiro'&&(activeOperation==='despesa'||activeOperation==='receita');
+ const methodWrapper=form.querySelector('#quick-method-wrap');
+ if(methodWrapper){methodWrapper.classList.toggle('is-hidden',cash);methodWrapper.querySelector('select').disabled=cash;}
+ const cashInfo=form.querySelector('#quick-cash-info');if(cashInfo)cashInfo.classList.toggle('is-hidden',!cash);
+}
 function renderEntry(){const target=document.querySelector('#entry-area');if(!target)return;
  if(entryMode==='texto'){
   target.innerHTML=card(`<form id="natural-form"><div class="field"><label for="natural-text">Descreva a movimentação</label><textarea id="natural-text" class="textarea" maxlength="400" placeholder="Ex.: paguei 30 da viagem escolar pix mp"></textarea></div><button class="btn btn-block" type="submit">Interpretar mensagem →</button></form><div class="sample-wrap"><button class="sample" data-sample="gastei 48 em duas marmitas pix mp">Marmitas</button><button class="sample" data-sample="coloquei 0,04 cofrinho gasolina mp">Aporte</button><button class="sample" data-sample="rendeu 6 centavos mp">Rendimento</button></div>`)+`<div id="parse-display"></div>`;
@@ -59,42 +75,46 @@ function renderQuick(preserve={}){const target=document.querySelector('#entry-ar
  let fields='';
  if(op==='despesa'||op==='receita'){
   fields+=fieldSelect('Categoria','category',op==='despesa'?EXPENSE_CATS:INCOME_CATS);
-  fields+=fieldSelect(op==='despesa'?'Conta utilizada':'Conta que recebeu','account',ACCOUNTS);
-  fields+=fieldSelect(op==='despesa'?'Forma de pagamento':'Forma de recebimento','method',METHODS);
+  fields+=accountField(op==='despesa'?'Conta utilizada':'Conta que recebeu','account');
+  fields+=`<div id="quick-method-wrap">${fieldSelect(op==='despesa'?'Forma de pagamento':'Forma de recebimento','method',METHODS)}</div>`;
+  fields+=`<div id="quick-cash-info" class="explain-transfer is-hidden">Dinheiro em espécie selecionado. Não precisa escolher uma forma de pagamento ou recebimento.</div>`;
   fields+=`<div class="field"><label for="quick-description">Descrição (opcional)</label><input id="quick-description" class="input" name="description" maxlength="200" placeholder="Ex.: almoço, salário, presente"></div>`;
  }else if(op==='cofrinho'){
   fields+=fieldSelect('Qual cofrinho?','pocket',POCKETS);
   fields+=fieldSelect('O que aconteceu?','direction',[['aporte','Guardar dinheiro (aporte)'],['resgate','Retirar dinheiro (resgate)']]);
   fields+=`<div class="explain-transfer"><b>Conta: Mercado Pago (automático)</b><span>Ao guardar: saldo MP → cofrinho. Ao retirar: cofrinho → saldo MP. Não é despesa nem receita.</span></div>`;
  }else if(op==='transferencia'){
-  fields+=fieldSelect('Conta de origem','fromAccount',ACCOUNTS);
-  fields+=fieldSelect('Conta de destino','toAccount',ACCOUNTS);
+  fields+=accountField('Conta de origem','fromAccount');
+  fields+=accountField('Conta de destino','toAccount');
   fields+=`<div class="explain-transfer">Transferência entre contas próprias. Não é receita nem despesa.</div>`;
  }else if(op==='aplicacao'){
   fields+=fieldSelect('Operação','direction',[['aporte','Aplicar dinheiro'],['resgate','Resgatar aplicação']]);
   fields+=fieldSelect('Instituição do investimento','bank',BANKS);
+  fields+=otherField('bank','Nome da instituição');
   fields+=fieldSelect('Tipo de investimento','investmentType',INVESTMENTS);
-  fields+=fieldSelect('Conta de origem / recebimento (confira)','account',ACCOUNTS);
+  fields+=accountField('Conta de origem / recebimento (confira)','account',ACCOUNT_OPTIONS.filter(([id])=>id!=='Dinheiro'));
   fields+=`<div class="explain-transfer">Aplicação: sai da conta para o investimento. Resgate: volta para a conta. O produto específico e os rendimentos precisarão de conferência.</div>`;
  }
  target.innerHTML=`<div class="card"><form id="quick-form" novalidate>
   <div class="field"><label for="quick-operation">Tipo de movimentação</label>${sel('operation',typeOptions,op,'Selecione').replace('name="operation"','id="quick-operation" name="operation"')}</div>
-  <div class="field"><label for="quick-amount">Valor (R$)</label><input id="quick-amount" class="input quick-amount" name="amount" inputmode="decimal" type="text" autocomplete="off" placeholder="0,00" required></div>
+  <div class="field"><label for="quick-amount">Valor (R$)</label><input id="quick-amount" class="input quick-amount" name="amount" inputmode="numeric" type="text" autocomplete="off" value="0,00" data-centavos required aria-describedby="amount-hint"><p class="hint" id="amount-hint">Digite apenas os números. Os centavos e a vírgula são posicionados automaticamente.</p></div>
   ${fields}
   <details class="more-details"><summary>Data e observações</summary><div class="field"><label for="quick-date">Data da movimentação</label><input id="quick-date" class="input" type="date" name="date" value="${localISO()}" required></div><div class="field"><label for="quick-note">Observações (opcional)</label><textarea id="quick-note" class="textarea" name="note" maxlength="300" placeholder="Informações adicionais"></textarea></div></details>
   <div id="quick-feedback" role="alert" aria-live="polite"></div>
   <p class="hint">Ao salvar, a operação ficará somente como rascunho local. A planilha e os saldos não serão alterados.</p>
   <button class="btn btn-block" type="submit">Salvar rascunho</button>
  </form></div>`;
- for(const name of ["amount","date","note"]){if(preserve[name]!=null){const input=target.querySelector(`[name="${name}"]`);if(input)input.value=preserve[name];}}
+ for(const name of ['amount','date','note']){if(preserve[name]!=null){const input=target.querySelector(`[name="${name}"]`);if(input)input.value=name==='amount'?formatCentavos(preserve[name]):preserve[name];}}
+ syncQuickConditional();
 }
+
 function saveQuick(form){
  const data=Object.fromEntries(new FormData(form)),r=makeDraft(data,localISO());
  const feedback=document.querySelector('#quick-feedback');
  if(!r.ok){if(feedback)feedback.innerHTML=`<div class="notice">${esc(r.error)}</div>`;notify(r.error);return;}
  const d={...r.draft};
  d.id=globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random()}`;
- d.createdAt=new Date().toISOString();d.state='RASCUNHO LOCAL';d.source='app-v1.1-form';
+ d.createdAt=new Date().toISOString();d.state='RASCUNHO LOCAL';d.source='app-v1.2-form';
  if(!saveLocalDraft(d))return;
  notify(r.warnings.length?'Salvo com marcação de revisão.':'Rascunho salvo no aparelho.');
  navigate('rascunhos');
@@ -154,7 +174,7 @@ function settings(){main.innerHTML=`${label('Seu aplicativo')}<h1 class="heading
  ${card(`<h3>O que vem na próxima versão?</h3><p class="small muted">Autenticação individual, leitura da planilha oficial em tempo real, envio de lançamentos com confirmação e histórico integrado. O webhook da Meta continuará separado.</p>`)}
  `}
 function saveSnapshot(form){const s={};for(const [k,v] of new FormData(form)){if(k==='date'){s.date=v;continue}const value=num(v);if(String(v).trim()&&value===null){notify('Valor inválido em '+k);return}if(value!==null)s[k]=value}state.snapshot=s;persist();notify('Valores guardados neste aparelho.');navigate('consultar')}
-function exportData(){const payload={format:'meu-financeiro-pwa-v1.1',createdAt:new Date().toISOString(),warning:'Rascunhos locais, não publicados no controle oficial.',drafts:state.drafts};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='meu-financeiro-rascunhos.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200)}
+function exportData(){const payload={format:'meu-financeiro-pwa-v1.2',createdAt:new Date().toISOString(),warning:'Rascunhos locais, não publicados no controle oficial.',drafts:state.drafts};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='meu-financeiro-rascunhos.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200)}
 function clearData(){if(!confirm('Apagar TODOS os rascunhos e valores locais armazenados neste navegador? Isso não afeta a planilha oficial.'))return;state=fresh();persist();notify('Dados locais apagados.');navigate('inicio')}
 document.body.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
  if(b.dataset.operation){activeOperation=b.dataset.operation;entryMode='rapido';navigate('registrar');return}
@@ -175,6 +195,17 @@ document.body.addEventListener('change',e=>{
   const match={'Mercado Pago':'Mercado Pago — saldo','Inter':'Inter','Outro banco/instituição':'Outro banco/conta'};
   if(account && !account.value)account.value=match[e.target.value]||'';
  }
+ if(e.target.matches('#quick-account,#quick-fromAccount,#quick-toAccount,#quick-bank'))syncQuickConditional();
+});
+document.body.addEventListener('input',e=>{
+ if(!e.target.matches('[data-centavos]'))return;
+ const input=e.target;
+ const masked=formatCentavos(input.value);
+ if(input.value!==masked)input.value=masked;
+ try{input.setSelectionRange(input.value.length,input.value.length)}catch(_){}
+});
+document.body.addEventListener('focusin',e=>{
+ if(e.target.matches('[data-centavos]')){const input=e.target;try{input.setSelectionRange(input.value.length,input.value.length)}catch(_){}}
 });
 document.body.addEventListener('submit',e=>{e.preventDefault();if(e.target.id==='quick-form')saveQuick(e.target);else if(e.target.id==='natural-form')showInterpret(e.target.querySelector('#natural-text').value);else if(e.target.id==='draft-form')handleSaveDraft(e.target);else if(e.target.id==='query-form')showQuery(e.target.querySelector('#query-text').value);else if(e.target.id==='snapshot-form')saveSnapshot(e.target)});
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installedPrompt=e});

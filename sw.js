@@ -1,4 +1,4 @@
-const CACHE='meu-financeiro-pwa-v1.1.0';
+const CACHE='meu-financeiro-pwa-v1.2.0';
 const CORE=['./','./index.html','./styles.css','./app.js','./parser.mjs','./operacoes.mjs','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(async keys=>{for(const key of keys)if(key.startsWith('meu-financeiro-pwa-')&&key!==CACHE)await caches.delete(key);await self.clients.claim()})));
