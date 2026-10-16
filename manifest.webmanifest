@@ -2,7 +2,7 @@
   "id":"./",
   "name":"Meu Financeiro — Assistente Pessoal",
   "short_name":"Meu Financeiro",
-  "description":"Seu dinheiro com clareza. Rascunhos financeiros locais com funcionamento offline.",
+  "description":"Seu dinheiro com clareza. Registros financeiros locais com funcionamento offline.",
   "lang":"pt-BR",
   "start_url":"./index.html",
   "scope":"./",

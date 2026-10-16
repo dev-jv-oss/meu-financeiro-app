@@ -1,8 +1,8 @@
-import {interpret,money,norm,round2} from './parser.mjs';
-import {makeDraft,TYPES,ACCOUNT_OPTIONS,OTHER_ACCOUNT,POCKETS,EXPENSE_CATS,INCOME_CATS,METHODS,INVESTMENTS,BANKS,BANK_OPTIONS,OTHER_BANK,formatCentavos} from './operacoes.mjs';
-import {migrate,active,canon,isValidName,positionOverview,getPosition,pocketBalance,investmentBalance,mayArchive,canDelete,displayPocket,displayBank,YIELD_MODES,validateYield,yieldLabel} from './catalogo.mjs';
-import {estimatePosition,positionDisplay,validateConditions,liquidityModes,settlementModes,validISO,daysBetween,defaultTax} from './rendimentos.mjs';
-const VERSION='1.5.0-local';
+import {interpret,money,norm,round2} from './parser.mjs?v=1.5.1';
+import {makeDraft,TYPES,ACCOUNT_OPTIONS,OTHER_ACCOUNT,POCKETS,EXPENSE_CATS,INCOME_CATS,METHODS,INVESTMENTS,BANKS,BANK_OPTIONS,OTHER_BANK,formatCentavos} from './operacoes.mjs?v=1.5.1';
+import {migrate,active,canon,isValidName,positionOverview,getPosition,pocketBalance,investmentBalance,mayArchive,canDelete,displayPocket,displayBank,YIELD_MODES,validateYield,yieldLabel} from './catalogo.mjs?v=1.5.1';
+import {estimatePosition,positionDisplay,validateConditions,liquidityModes,settlementModes,validISO,daysBetween,defaultTax} from './rendimentos.mjs?v=1.5.1';
+const VERSION='1.5.1-local';
 const KEY='meu-financeiro-pwa-local-v1';
 const main=document.querySelector('#main');
 const toastEl=document.querySelector('#toast');

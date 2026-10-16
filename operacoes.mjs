@@ -1,16 +1,17 @@
 /* Modelo de registros locais v1.2. Sem acesso a banco, planilha ou rede. */
-import {round2} from './parser.mjs';
+import {round2} from './parser.mjs?v=1.5.1';
 export const TYPES=['despesa','receita','cofrinho','transferencia','aplicacao','recarga'];
 // Os valores canônicos permanecem compatíveis com os rascunhos e parser anteriores.
 export const ACCOUNTS=['Inter','Mercado Pago — saldo','Dinheiro','Outro banco/conta'];
-export const ACCOUNT_OPTIONS=[['Inter','Inter'],['Mercado Pago — saldo','Mercado Pago'],['Dinheiro','Dinheiro'],['Outro banco/conta','Outro banco']];
+export const ACCOUNT_OPTIONS=[['Inter','Banco Inter'],['Mercado Pago — saldo','Mercado Pago'],['Dinheiro','Dinheiro'],['Outro banco/conta','Outro banco']];
 export const OTHER_ACCOUNT='Outro banco/conta';
 export const POCKETS=['Cofrinho Viagem Fortaleza','Cofrinho Gasolina','Cofrinho Mounjaro','Cofrinho Crédito celular'];
 export const EXPENSE_CATS=['Recarga de celular','Refeições','Alimentação','Casa e limpeza','Educação','Transporte','Serviços','Compras online','Saúde','Moradia','Lazer','Outros'];
 export const INCOME_CATS=['Salário','Reembolso','Rendimentos','Vendas','Presente','Outras receitas'];
 export const METHODS=['Pix','Débito em conta','Cartão de débito','Cartão de crédito','Boleto','Transferência','Outro'];
-export const INVESTMENTS=['CDB','Tesouro Direto','LCI/LCA','Fundos de investimento','Poupança','Outros'];
+export const INVESTMENTS=['CDB','LCI','LCA','LCI/LCA','RDB','Tesouro Direto','Fundos de investimento','Poupança','Outros'];
 export const BANKS=['Mercado Pago','Inter','Outro banco/instituição'];
+export const BANK_OPTIONS=[['Mercado Pago','Mercado Pago'],['Inter','Banco Inter'],['Outro banco/instituição','Outro banco']];
 export const OTHER_BANK='Outro banco/instituição';
 const text=s=>String(s??'').trim();
 const missing=(value,label)=>text(value)?null:`Selecione ${label}.`;
@@ -40,7 +41,7 @@ function accountInfo(selected,custom,label){
   if(name.length>80)return {ok:false,error:'O nome do banco deve ter até 80 caracteres.'};
   return {ok:true,value:selected,name};
  }
- return {ok:true,value:selected,name:selected==='Mercado Pago — saldo'?'Mercado Pago':selected};
+ return {ok:true,value:selected,name:selected==='Mercado Pago — saldo'?'Mercado Pago':selected==='Inter'?'Banco Inter':selected};
 }
 const sameName=(a,b)=>a.toLocaleLowerCase('pt-BR')===b.toLocaleLowerCase('pt-BR');
 function desc(type,d){
@@ -68,7 +69,8 @@ export function makeDraft(input,today,options={}){
   pocket:'',direction:'',fromAccount:'',toAccount:'',bank:'',investmentType:'',note:f.note||''};
  const review=[];
  if(type==='despesa'||type==='receita'||type==='recarga'){
-  if(type==='recarga'){f.category='Recarga de celular';if(!['Meu celular','Ísis','Outro contato'].includes(f.recipient))return {ok:false,error:'Escolha quem receberá a recarga.'};if(f.recipient==='Outro contato'&&!text(f.recipientName))return {ok:false,error:'Informe quem receberá a recarga.'};}
+  if(type==='recarga')f.category='Recarga de celular';
+  if(f.category==='Recarga de celular'){if(!['Meu celular','Ísis','Outro contato'].includes(f.recipient))return {ok:false,error:'Escolha quem receberá a recarga.'};if(f.recipient==='Outro contato'&&!text(f.recipientName))return {ok:false,error:'Informe quem receberá a recarga.'};}
   if(!f.category)return {ok:false,error:'Selecione uma categoria.'};
   if(!(type==='receita'?INCOME_CATS:EXPENSE_CATS).includes(f.category))return {ok:false,error:'Selecione uma categoria da lista.'};
   const account=accountInfo(f.account,f.accountName,'conta');
@@ -78,8 +80,8 @@ export function makeDraft(input,today,options={}){
   if(!method)return {ok:false,error:'Selecione a forma de pagamento/recebimento.'};
   if(account.value!=='Dinheiro'&&!METHODS.includes(method))return {ok:false,error:'Selecione uma forma válida.'};
   d.category=f.category;d.account=account.value;d.accountName=account.name;d.method=method;
-  if(type==='recarga'){d.recipient=f.recipient==='Outro contato'?text(f.recipientName):f.recipient;d.recipientType=f.recipient;}
-  if(type!=='receita'&&method==='Cartão de crédito')review.push('Compra no cartão: conferir cartão e competência da fatura antes de enviar ao controle oficial.');
+  if(f.category==='Recarga de celular'){d.recipient=f.recipient==='Outro contato'?text(f.recipientName):f.recipient;d.recipientType=f.recipient;d.description=`Recarga de celular · ${d.recipient}`;}
+  if(type!=='receita'&&method==='Cartão de crédito')review.push('Compra no cartão: conferir emissor, cartão, parcelas e competência da fatura antes de enviar ao controle oficial.');
  }else if(type==='cofrinho'){
   const error=missing(f.pocket,'o cofrinho')||missing(f.direction,'aporte ou resgate');
   if(error)return {ok:false,error};
@@ -118,7 +120,7 @@ export function makeDraft(input,today,options={}){
   else{d.fromAccount=target;d.toAccount=account.value;d.fromAccountName=target;d.toAccountName=account.name;}
   review.push('Investimentos exigem produto/posição identificável e regras de rendimentos/tributação antes da integração oficial.');
  }
- d.description=text(f.description)||desc(type,d);
+ d.description=text(f.description)||d.description||desc(type,d);
  d.reviewRequired=review.length>0;d.reviewReasons=review;
  return {ok:true,draft:d,warnings:review};
 }

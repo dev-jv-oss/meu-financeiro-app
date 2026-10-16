@@ -1,4 +1,4 @@
-import {positionDisplay} from './rendimentos.mjs';
+import {positionDisplay} from './rendimentos.mjs?v=1.5.1';
 /** Patrimônio local. Compatível com o armazenamento da v1.0/v1.2.
  * Saldo não é inferido de rascunhos: apenas posição manual confirmada pelo usuário. */
 export const DEFAULT_POCKETS = [
