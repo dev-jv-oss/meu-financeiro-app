@@ -1,5 +1,15 @@
-const CACHE='meu-financeiro-pwa-v1.2.0';
-const CORE=['./','./index.html','./styles.css','./app.js','./parser.mjs','./operacoes.mjs','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png'];
+/* Meu Financeiro 1.3 — same origin, versioned cache, offline-safe navigation. */
+const CACHE='meu-financeiro-pwa-v1.3.0-final-2';
+const ROOT=new URL('./',self.location.href);
+const CORE=['./','./index.html','./styles.css','./app.js','./parser.mjs','./operacoes.mjs','./catalogo.mjs','./manifest.webmanifest','./icons/logo-mark.svg','./icons/icon-192.png','./icons/icon-512.png','./icons/icon-maskable-192.png','./icons/icon-maskable-512.png','./icons/icon-180.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting())));
-self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(async keys=>{for(const key of keys)if(key.startsWith('meu-financeiro-pwa-')&&key!==CACHE)await caches.delete(key);await self.clients.claim()})));
-self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==self.location.origin||!u.pathname.startsWith(new URL('./',self.location.href).pathname))return;e.respondWith(fetch(e.request).then(r=>{if(r.ok){const rc=r.clone();caches.open(CACHE).then(c=>c.put(e.request,rc)).catch(()=>{});}return r}).catch(()=>caches.match(e.request).then(r=>r||caches.match('./index.html'))))});
+self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(async keys=>{for(const k of keys)if(k.startsWith('meu-financeiro-pwa-')&&k!==CACHE)await caches.delete(k);await self.clients.claim()})));
+self.addEventListener('fetch',e=>{
+ const r=e.request,u=new URL(r.url);
+ if(r.method!=='GET'||u.origin!==self.location.origin||!u.pathname.startsWith(ROOT.pathname))return;
+ // Navigation uses network first, with offline fallback only for documents.
+ if(r.mode==='navigate'){
+  e.respondWith(fetch(r).then(response=>{if(response.ok){const clone=response.clone();caches.open(CACHE).then(c=>c.put('./index.html',clone)).catch(()=>{});}return response;}).catch(()=>caches.match('./index.html')));return;
+ }
+ e.respondWith(fetch(r).then(response=>{if(response.ok){const clone=response.clone();caches.open(CACHE).then(c=>c.put(r,clone)).catch(()=>{});}return response;}).catch(()=>caches.match(r)));
+});

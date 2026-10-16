@@ -1,12 +1,12 @@
 /* Modelo de registros locais v1.2. Sem acesso a banco, planilha ou rede. */
 import {round2} from './parser.mjs';
-export const TYPES=['despesa','receita','cofrinho','transferencia','aplicacao'];
+export const TYPES=['despesa','receita','cofrinho','transferencia','aplicacao','recarga'];
 // Os valores canônicos permanecem compatíveis com os rascunhos e parser anteriores.
 export const ACCOUNTS=['Inter','Mercado Pago — saldo','Dinheiro','Outro banco/conta'];
 export const ACCOUNT_OPTIONS=[['Inter','Inter'],['Mercado Pago — saldo','Mercado Pago'],['Dinheiro','Dinheiro'],['Outro banco/conta','Outro banco']];
 export const OTHER_ACCOUNT='Outro banco/conta';
 export const POCKETS=['Cofrinho Viagem Fortaleza','Cofrinho Gasolina','Cofrinho Mounjaro','Cofrinho Crédito celular'];
-export const EXPENSE_CATS=['Refeições','Alimentação','Casa e limpeza','Educação','Transporte','Serviços','Compras online','Saúde','Moradia','Lazer','Outros'];
+export const EXPENSE_CATS=['Recarga de celular','Refeições','Alimentação','Casa e limpeza','Educação','Transporte','Serviços','Compras online','Saúde','Moradia','Lazer','Outros'];
 export const INCOME_CATS=['Salário','Reembolso','Rendimentos','Vendas','Presente','Outras receitas'];
 export const METHODS=['Pix','Débito em conta','Cartão de débito','Cartão de crédito','Boleto','Transferência','Outro'];
 export const INVESTMENTS=['CDB','Tesouro Direto','LCI/LCA','Fundos de investimento','Poupança','Outros'];
@@ -45,6 +45,7 @@ function accountInfo(selected,custom,label){
 const sameName=(a,b)=>a.toLocaleLowerCase('pt-BR')===b.toLocaleLowerCase('pt-BR');
 function desc(type,d){
  switch(type){
+  case'recarga':return `Recarga de celular · ${d.recipient}`;
   case'despesa':return `Despesa${d.category?' · '+d.category:''}`;
   case'receita':return `Receita${d.category?' · '+d.category:''}`;
   case'cofrinho':return `${d.direction==='resgate'?'Resgate':'Aporte'} · ${d.pocket}`;
@@ -53,7 +54,7 @@ function desc(type,d){
   default:return 'Movimentação';
  }
 }
-export function makeDraft(input,today){
+export function makeDraft(input,today,options={}){
  const f=Object.fromEntries(Object.entries(input||{}).map(([k,v])=>[k,text(v)]));
  const type=f.operation;
  if(!TYPES.includes(type))return {ok:false,error:'Escolha o tipo de operação.'};
@@ -62,13 +63,14 @@ export function makeDraft(input,today){
  const date=f.date||today;
  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(Date.parse(`${date}T12:00:00Z`))||new Date(`${date}T12:00:00Z`).toISOString().slice(0,10)!==date)return {ok:false,error:'Informe uma data válida.'};
  if(date>today)return {ok:false,error:'Lançamentos futuros não devem ser registrados como operações já realizadas.'};
- const d={kind:type==='cofrinho'||type==='transferencia'?'transferencia':type==='aplicacao'?'aplicacao':type,
+ const d={kind:type==='recarga'?'despesa':type==='cofrinho'||type==='transferencia'?'transferencia':type==='aplicacao'?'aplicacao':type,
   operation:type,amount,date,description:'',category:'Não se aplica',account:'',accountName:'',method:'Não se aplica',
   pocket:'',direction:'',fromAccount:'',toAccount:'',bank:'',investmentType:'',note:f.note||''};
  const review=[];
- if(type==='despesa'||type==='receita'){
+ if(type==='despesa'||type==='receita'||type==='recarga'){
+  if(type==='recarga'){f.category='Recarga de celular';if(!['Meu celular','Ísis','Outro contato'].includes(f.recipient))return {ok:false,error:'Escolha quem receberá a recarga.'};if(f.recipient==='Outro contato'&&!text(f.recipientName))return {ok:false,error:'Informe quem receberá a recarga.'};}
   if(!f.category)return {ok:false,error:'Selecione uma categoria.'};
-  if(!(type==='despesa'?EXPENSE_CATS:INCOME_CATS).includes(f.category))return {ok:false,error:'Selecione uma categoria da lista.'};
+  if(!(type==='receita'?INCOME_CATS:EXPENSE_CATS).includes(f.category))return {ok:false,error:'Selecione uma categoria da lista.'};
   const account=accountInfo(f.account,f.accountName,'conta');
   if(!account.ok)return account;
   // Dinheiro em espécie não tem forma de pagamento a selecionar.
@@ -76,12 +78,13 @@ export function makeDraft(input,today){
   if(!method)return {ok:false,error:'Selecione a forma de pagamento/recebimento.'};
   if(account.value!=='Dinheiro'&&!METHODS.includes(method))return {ok:false,error:'Selecione uma forma válida.'};
   d.category=f.category;d.account=account.value;d.accountName=account.name;d.method=method;
-  if(type==='despesa'&&method==='Cartão de crédito')review.push('Compra no cartão: conferir cartão e competência da fatura antes de enviar ao controle oficial.');
+  if(type==='recarga'){d.recipient=f.recipient==='Outro contato'?text(f.recipientName):f.recipient;d.recipientType=f.recipient;}
+  if(type!=='receita'&&method==='Cartão de crédito')review.push('Compra no cartão: conferir cartão e competência da fatura antes de enviar ao controle oficial.');
  }else if(type==='cofrinho'){
   const error=missing(f.pocket,'o cofrinho')||missing(f.direction,'aporte ou resgate');
   if(error)return {ok:false,error};
-  if(!POCKETS.includes(f.pocket)||!['aporte','resgate'].includes(f.direction))return {ok:false,error:'Cofrinho ou direção inválida.'};
-  d.pocket=f.pocket;d.direction=f.direction;d.account='Mercado Pago — saldo';d.accountName='Mercado Pago';
+  if(!(options.pockets||POCKETS).includes(f.pocket)||!['aporte','resgate'].includes(f.direction))return {ok:false,error:'Cofrinho ou direção inválida.'};
+  d.pocket=f.pocket;d.pocketId=f.pocketId||'';d.direction=f.direction;d.account='Mercado Pago — saldo';d.accountName='Mercado Pago';
   d.fromAccount=f.direction==='aporte'?d.account:f.pocket;
   d.toAccount=f.direction==='aporte'?f.pocket:d.account;
   d.fromAccountName=f.direction==='aporte'?'Mercado Pago':f.pocket;
@@ -108,7 +111,7 @@ export function makeDraft(input,today){
   const bank=f.bank===OTHER_BANK?text(f.bankName).replace(/\s+/g,' '):f.bank;
   if(!bank)return {ok:false,error:'Informe o nome da instituição do investimento.'};
   if(bank.length>80)return {ok:false,error:'O nome da instituição deve ter até 80 caracteres.'};
-  d.direction=f.direction;d.bank=bank;d.bankType=f.bank;d.investmentType=f.investmentType;
+  d.direction=f.direction;d.investmentId=f.investmentId||'';d.investmentName=f.investmentName||'';d.bank=bank;d.bankType=f.bank;d.investmentType=f.investmentType;
   d.account=account.value;d.accountName=account.name;d.method='Movimentação de investimento';
   const target=`${bank} · ${f.investmentType}`;
   if(f.direction==='aporte'){d.fromAccount=account.value;d.toAccount=target;d.fromAccountName=account.name;d.toAccountName=target;}
