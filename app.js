@@ -1,5 +1,6 @@
 import {interpret,money,norm,round2} from './parser.mjs';
-const VERSION='1.0.0-local';
+import {makeDraft,TYPES,ACCOUNTS,POCKETS,EXPENSE_CATS,INCOME_CATS,METHODS,INVESTMENTS,BANKS} from './operacoes.mjs';
+const VERSION='1.1.0-local';
 const KEY='meu-financeiro-pwa-local-v1';
 const main=document.querySelector('#main');
 const toastEl=document.querySelector('#toast');
@@ -8,7 +9,7 @@ const maybeMoney=v=>v==null?'—':money(v);
 const num=v=>{let s=String(v??'').trim();if(!s)return null;s=s.replace(/R\$|\s/g,'');if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');else s=s.replace(',','.');const n=Number(s);return Number.isFinite(n)&&n>=0?round2(n):null};
 const fresh=()=>({drafts:[],snapshot:null});
 function load(){try{let s=JSON.parse(localStorage.getItem(KEY)||'null');return s&&Array.isArray(s.drafts)?s:fresh()}catch(_){return fresh()}}
-let state=load(),route='inicio',pending=null,installedPrompt=null;
+let state=load(),route='inicio',pending=null,installedPrompt=null,activeOperation='despesa',entryMode='rapido';
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(state));return true}catch(_){notify('Não foi possível salvar. Verifique o armazenamento do navegador.');return false}}
 function notify(t){toastEl.textContent=t;toastEl.classList.add('show');clearTimeout(notify._id);notify._id=setTimeout(()=>toastEl.classList.remove('show'),4000)}
 function navigate(r){route=r;pending=null;document.querySelectorAll('[data-route]').forEach(x=>x.classList.toggle('selected',x.dataset.route===r));render();window.scrollTo({top:0,behavior:'instant'})}
@@ -25,19 +26,80 @@ function home(){let sp=state.snapshot;main.innerHTML=`
   ${alert}
   <div class="section-title">O que vamos fazer?</div>
   <div class="quickgrid">
-   <button class="quick" data-route="registrar"><span class="qicon">↗</span><strong>Nova despesa</strong><span>Texto ou formulário</span></button>
-   <button class="quick" data-route="registrar"><span class="qicon">↘</span><strong>Receita</strong><span>Entrada de dinheiro</span></button>
-   <button class="quick" data-route="registrar"><span class="qicon">⇄</span><strong>Transferência</strong><span>Entre conta e cofrinho</span></button>
+   <button class="quick" data-operation="despesa"><span class="qicon">↗</span><strong>Nova despesa</strong><span>Formulário rápido</span></button>
+   <button class="quick" data-operation="receita"><span class="qicon">↘</span><strong>Receita</strong><span>Entrada de dinheiro</span></button>
+   <button class="quick" data-operation="cofrinho"><span class="qicon">⇄</span><strong>Cofrinhos</strong><span>Guardar ou retirar</span></button>
    <button class="quick" data-route="consultar"><span class="qicon">◷</span><strong>Consultas</strong><span>Saldos e faturas</span></button>
   </div>
   <div class="section-title">Seu espaço de teste <small>Somente no aparelho</small></div>
   <div class="stats"><div class="stat"><div class="caption">Rascunhos locais</div><div class="metric">${state.drafts.length}</div><div class="caption">Nada publicado ainda</div></div><div class="stat"><div class="caption">Sistema financeiro</div><div class="metric metric-sm">Pendente</div><div class="caption">Conexão segura será a próxima etapa</div></div></div>
-  <div class="section-title">Como registrar</div>
-  ${card(`<div class="small examples">Escreva naturalmente, por exemplo:<br><b>“gastei 48 em duas marmitas pix mp”</b><br><b>“tirei 0,04 do cofrinho gasolina mp”</b><br><b>“rendeu 6 centavos mp”</b></div><button class="btn btn-secondary btn-block mt-15" data-route="registrar">Testar interpretador →</button>`)}
+  <div class="section-title">Registro simplificado</div>
+  ${card(`<p class="small muted">Escolha a operação, informe o valor e selecione apenas os dados necessários. O texto livre continua disponível na aba Registrar.</p><div class="quick-inline"><button class="btn btn-secondary" data-operation="transferencia">Transferir entre contas</button><button class="btn btn-secondary" data-operation="aplicacao">Investimentos</button></div>`)}
  `}
-function register(){main.innerHTML=`${label('Lançamento inteligente')}<h1 class="heading">Registrar movimentação</h1><p class="lede">Digite como você falaria. O aplicativo sugere os campos, mas pede sua confirmação.</p>
- ${card(`<form id="natural-form"><div class="field"><label for="natural-text">Descreva a movimentação</label><textarea id="natural-text" class="textarea" maxlength="400" placeholder="Ex.: paguei 30 da viagem escolar pix mp"></textarea></div><button class="btn btn-block" type="submit">Interpretar mensagem →</button></form><div class="sample-wrap"><button class="sample" data-sample="gastei 48 em duas marmitas pix mp">Marmitas</button><button class="sample" data-sample="coloquei 0,04 cofrinho gasolina mp">Aporte</button><button class="sample" data-sample="rendeu 6 centavos mp">Rendimento</button><button class="sample" data-sample="paguei diarista pix mp">Sem valor</button></div>`)}
- <div id="parse-display"></div>${alert}`;}
+const opLabels={despesa:'Despesa',receita:'Receita',cofrinho:'Cofrinho',transferencia:'Entre contas',aplicacao:'Investimento'};
+function register(){
+ main.innerHTML=`${label('Lançamento rápido')}<h1 class="heading">Registrar movimentação</h1>
+ <p class="lede">Escolha a operação. O formulário mostrará somente o que precisa ser informado.</p>
+ <div class="entry-tabs" role="group" aria-label="Forma de registrar">
+  <button type="button" class="entry-tab ${entryMode==='rapido'?'active':''}" data-entry="rapido">Formulário rápido</button>
+  <button type="button" class="entry-tab ${entryMode==='texto'?'active':''}" data-entry="texto">Escrever mensagem</button>
+ </div><div id="entry-area"></div>${alert}`;
+ renderEntry();
+}
+function optSelect(name,values,val='',caption='Selecione'){return sel(name,values.map(x=>[x,x]),val,caption)}
+function fieldSelect(title,name,opts,value='',placeholder='Selecione'){return `<div class="field"><label for="quick-${name}">${esc(title)}</label>${sel(name,opts.map(x=>Array.isArray(x)?x:[x,x]),value,placeholder).replace(`name="${name}"`,`id="quick-${name}" name="${name}"`)}</div>`}
+function renderEntry(){const target=document.querySelector('#entry-area');if(!target)return;
+ if(entryMode==='texto'){
+  target.innerHTML=card(`<form id="natural-form"><div class="field"><label for="natural-text">Descreva a movimentação</label><textarea id="natural-text" class="textarea" maxlength="400" placeholder="Ex.: paguei 30 da viagem escolar pix mp"></textarea></div><button class="btn btn-block" type="submit">Interpretar mensagem →</button></form><div class="sample-wrap"><button class="sample" data-sample="gastei 48 em duas marmitas pix mp">Marmitas</button><button class="sample" data-sample="coloquei 0,04 cofrinho gasolina mp">Aporte</button><button class="sample" data-sample="rendeu 6 centavos mp">Rendimento</button></div>`)+`<div id="parse-display"></div>`;
+ }else renderQuick();
+}
+function renderQuick(preserve={}){const target=document.querySelector('#entry-area');if(!target)return;
+ let op=activeOperation;
+ let typeOptions=TYPES.map(x=>[x,opLabels[x]]);
+ let fields='';
+ if(op==='despesa'||op==='receita'){
+  fields+=fieldSelect('Categoria','category',op==='despesa'?EXPENSE_CATS:INCOME_CATS);
+  fields+=fieldSelect(op==='despesa'?'Conta utilizada':'Conta que recebeu','account',ACCOUNTS);
+  fields+=fieldSelect(op==='despesa'?'Forma de pagamento':'Forma de recebimento','method',METHODS);
+  fields+=`<div class="field"><label for="quick-description">Descrição (opcional)</label><input id="quick-description" class="input" name="description" maxlength="200" placeholder="Ex.: almoço, salário, presente"></div>`;
+ }else if(op==='cofrinho'){
+  fields+=fieldSelect('Qual cofrinho?','pocket',POCKETS);
+  fields+=fieldSelect('O que aconteceu?','direction',[['aporte','Guardar dinheiro (aporte)'],['resgate','Retirar dinheiro (resgate)']]);
+  fields+=`<div class="explain-transfer"><b>Conta: Mercado Pago (automático)</b><span>Ao guardar: saldo MP → cofrinho. Ao retirar: cofrinho → saldo MP. Não é despesa nem receita.</span></div>`;
+ }else if(op==='transferencia'){
+  fields+=fieldSelect('Conta de origem','fromAccount',ACCOUNTS);
+  fields+=fieldSelect('Conta de destino','toAccount',ACCOUNTS);
+  fields+=`<div class="explain-transfer">Transferência entre contas próprias. Não é receita nem despesa.</div>`;
+ }else if(op==='aplicacao'){
+  fields+=fieldSelect('Operação','direction',[['aporte','Aplicar dinheiro'],['resgate','Resgatar aplicação']]);
+  fields+=fieldSelect('Instituição do investimento','bank',BANKS);
+  fields+=fieldSelect('Tipo de investimento','investmentType',INVESTMENTS);
+  fields+=fieldSelect('Conta de origem / recebimento (confira)','account',ACCOUNTS);
+  fields+=`<div class="explain-transfer">Aplicação: sai da conta para o investimento. Resgate: volta para a conta. O produto específico e os rendimentos precisarão de conferência.</div>`;
+ }
+ target.innerHTML=`<div class="card"><form id="quick-form" novalidate>
+  <div class="field"><label for="quick-operation">Tipo de movimentação</label>${sel('operation',typeOptions,op,'Selecione').replace('name="operation"','id="quick-operation" name="operation"')}</div>
+  <div class="field"><label for="quick-amount">Valor (R$)</label><input id="quick-amount" class="input quick-amount" name="amount" inputmode="decimal" type="text" autocomplete="off" placeholder="0,00" required></div>
+  ${fields}
+  <details class="more-details"><summary>Data e observações</summary><div class="field"><label for="quick-date">Data da movimentação</label><input id="quick-date" class="input" type="date" name="date" value="${localISO()}" required></div><div class="field"><label for="quick-note">Observações (opcional)</label><textarea id="quick-note" class="textarea" name="note" maxlength="300" placeholder="Informações adicionais"></textarea></div></details>
+  <div id="quick-feedback" role="alert" aria-live="polite"></div>
+  <p class="hint">Ao salvar, a operação ficará somente como rascunho local. A planilha e os saldos não serão alterados.</p>
+  <button class="btn btn-block" type="submit">Salvar rascunho</button>
+ </form></div>`;
+ for(const name of ["amount","date","note"]){if(preserve[name]!=null){const input=target.querySelector(`[name="${name}"]`);if(input)input.value=preserve[name];}}
+}
+function saveQuick(form){
+ const data=Object.fromEntries(new FormData(form)),r=makeDraft(data,localISO());
+ const feedback=document.querySelector('#quick-feedback');
+ if(!r.ok){if(feedback)feedback.innerHTML=`<div class="notice">${esc(r.error)}</div>`;notify(r.error);return;}
+ const d={...r.draft};
+ d.id=globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random()}`;
+ d.createdAt=new Date().toISOString();d.state='RASCUNHO LOCAL';d.source='app-v1.1-form';
+ if(!saveLocalDraft(d))return;
+ notify(r.warnings.length?'Salvo com marcação de revisão.':'Rascunho salvo no aparelho.');
+ navigate('rascunhos');
+}
+function saveLocalDraft(d){const previous=[...state.drafts];state.drafts.unshift(d);if(state.drafts.length>100)state.drafts.length=100;if(!persist()){state.drafts=previous;return false;}return true;}
 const kinds=[['despesa','Despesa'],['receita','Receita'],['transferencia','Transferência interna'],['revisao','Revisão especial']];
 const cats=['Refeições','Casa e limpeza','Educação','Transporte','Serviços','Compras online','Alimentação','Saúde','Outros','Receitas','Rendimentos','Não se aplica'];
 const accounts=['Mercado Pago — saldo','Inter','Outro banco/conta'];
@@ -65,7 +127,7 @@ function showInterpret(text){const p=interpret(text);const wrap=document.querySe
  wrap.scrollIntoView({behavior:'smooth',block:'start'});
 }
 function handleSaveDraft(form){let d=Object.fromEntries(new FormData(form)),val=num(d.amount);if(val==null||val<=0){notify('Informe um valor maior que zero.');return}if(!d.account){notify('Informe a conta antes de salvar.');return}if(d.kind==='transferencia'&&(!d.pocket||!d.direction)){notify('Informe cofrinho e direção da transferência.');return}if(!d.date){notify('Informe a data efetiva.');return}if(d.kind==='revisao') {notify('Estornos e operações complexas precisam revisão antes de integrar.');}
- d.amount=val;d.id=globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random()}`;d.createdAt=new Date().toISOString();d.state='RASCUNHO LOCAL';d.source='app-v1';state.drafts.unshift(d);if(state.drafts.length>100)state.drafts.length=100;if(persist()){notify('Rascunho salvo neste aparelho. Não foi enviado à planilha.');navigate('rascunhos')}}
+ d.amount=val;d.id=globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random()}`;d.createdAt=new Date().toISOString();d.state='RASCUNHO LOCAL';d.source='app-v1';if(saveLocalDraft(d)){notify('Rascunho salvo neste aparelho. Não foi enviado à planilha.');navigate('rascunhos')}}
 function consult(){let sp=state.snapshot;main.innerHTML=`${label('Acompanhamento')}<h1 class="heading">Consultar finanças</h1><p class="lede">Valores informados manualmente neste aparelho. A sincronização com o Google Sheets será implementada em seguida.</p>${alert}
  ${card(`<form id="query-form"><div class="field"><label for="query-text">O que deseja consultar?</label><input id="query-text" class="input" maxlength="150" placeholder="Ex.: fatura atual inter"></div><button class="btn btn-block" type="submit">Consultar</button></form><div class="sample-wrap">${['saldo mp','saldo cofrinho fortaleza','limite disponível inter','fatura atual mp','fatura janeiro mp','fatura 01/26 inter'].map(x=>`<button class="sample" data-query="${esc(x)}">${esc(x)}</button>`).join('')}</div><div id="query-out"></div>`)}
  <div class="section-title">Valores locais <small>Não sincronizados</small></div>
@@ -83,7 +145,7 @@ if(p.kind==='fatura'){if(p.period)extra='Consulta por competência específica a
 target.innerHTML=`<div class="card"><span class="pill neutral">Consulta local</span><h3 class="mb-7">${esc(labelText||'Consulta')}</h3><div class="heading money">${maybeMoney(val)}</div><p class="hint">${esc(extra||'Última posição digitada neste aparelho: '+(sp.date||'sem data')+'. Não é uma consulta ao banco nem à planilha oficial.')}</p></div>`;}
 function drafts(){main.innerHTML=`${label('Área privada do aparelho')}<h1 class="heading">Rascunhos</h1><p class="lede">Estas operações não foram enviadas à sua planilha oficial. Não as registre duas vezes.</p>${alert}
  <div class="spaced section-title"><span>${state.drafts.length} rascunho(s)</span><button class="btn btn-ghost" data-do="export" ${state.drafts.length?'':'disabled'}>Exportar JSON</button></div>
- ${state.drafts.length?state.drafts.map(d=>`<div class="draft"><div class="draft-head"><div><span class="pill neutral">RASCUNHO LOCAL</span><h4>${esc(d.description)}</h4><div class="meta">${esc(d.date)} · ${esc(d.category)} · ${esc(d.account)}</div></div><div class="amount money">${money(d.amount)}</div></div><div class="draft-acts"><button class="btn btn-red" data-del="${esc(d.id)}">Excluir rascunho</button></div></div>`).join(''):`<div class="empty"><div class="symbol">▤</div><b>Nenhum rascunho</b><p>Use a aba Registrar para experimentar o interpretador com operações reais sem afetar a planilha.</p></div>`}
+ ${state.drafts.length?state.drafts.map(d=>`<div class="draft"><div class="draft-head"><div><span class="pill neutral">RASCUNHO LOCAL</span><h4>${esc(d.description)}</h4><div class="meta">${esc(d.date)} · ${esc(opLabels[d.operation]||d.kind||"Movimentação")} · ${esc(d.pocket||d.category||"—")}</div>${d.reviewRequired?`<div class="review-note">Pendente de revisão antes de integrar</div>`:""}</div><div class="amount money">${money(d.amount)}</div></div><div class="draft-acts"><button class="btn btn-red" data-del="${esc(d.id)}">Excluir rascunho</button></div></div>`).join(''):`<div class="empty"><div class="symbol">▤</div><b>Nenhum rascunho</b><p>Use a aba Registrar para experimentar o interpretador com operações reais sem afetar a planilha.</p></div>`}
  <p class="secondary-note">Rascunhos não são transações financeiras confirmadas. Para evitar registros duplicados, não envie automaticamente o arquivo exportado ao bot do WhatsApp.</p>`;}
 function snapshot(){const s=state.snapshot||{}; const fields=[['mp','Saldo livre MP'],['fortaleza','Cofrinho Viagem Fortaleza'],['gasolina','Cofrinho Gasolina'],['mounjaro','Cofrinho Mounjaro'],['celular','Cofrinho Crédito celular'],['limiteMp','Limite disponível cartão MP'],['limiteInter','Limite disponível Inter'],['faturaMp','Fatura atual MP'],['faturaInter','Fatura atual Inter']];main.innerHTML=`${label('Valores inseridos por você')}<h1 class="heading">Posição financeira local</h1><p class="lede">Você pode preencher manualmente para testar as consultas. Não corresponde a uma sincronização com seus bancos.</p><div class="notice">⚠️ Dados salvos no armazenamento do navegador, sem criptografia própria. Não recomendamos usar em aparelhos compartilhados.</div>${card(`<form id="snapshot-form">${fields.map(([id,name])=>`<div class="field"><label>${name}</label><input class="input" inputmode="decimal" name="${id}" placeholder="Deixe em branco se não souber" value="${s[id]??''}"></div>`).join('')}<div class="field"><label>Data da posição</label><input type="date" class="input" name="date" value="${esc(s.date||localISO())}"></div><button class="btn btn-block" type="submit">Salvar valores apenas neste aparelho</button></form>`)}`}
 function settings(){main.innerHTML=`${label('Seu aplicativo')}<h1 class="heading">Ajustes e privacidade</h1>
@@ -92,9 +154,11 @@ function settings(){main.innerHTML=`${label('Seu aplicativo')}<h1 class="heading
  ${card(`<h3>O que vem na próxima versão?</h3><p class="small muted">Autenticação individual, leitura da planilha oficial em tempo real, envio de lançamentos com confirmação e histórico integrado. O webhook da Meta continuará separado.</p>`)}
  `}
 function saveSnapshot(form){const s={};for(const [k,v] of new FormData(form)){if(k==='date'){s.date=v;continue}const value=num(v);if(String(v).trim()&&value===null){notify('Valor inválido em '+k);return}if(value!==null)s[k]=value}state.snapshot=s;persist();notify('Valores guardados neste aparelho.');navigate('consultar')}
-function exportData(){const payload={format:'meu-financeiro-pwa-v1',createdAt:new Date().toISOString(),warning:'Rascunhos locais, não publicados no controle oficial.',drafts:state.drafts};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='meu-financeiro-rascunhos.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200)}
+function exportData(){const payload={format:'meu-financeiro-pwa-v1.1',createdAt:new Date().toISOString(),warning:'Rascunhos locais, não publicados no controle oficial.',drafts:state.drafts};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='meu-financeiro-rascunhos.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200)}
 function clearData(){if(!confirm('Apagar TODOS os rascunhos e valores locais armazenados neste navegador? Isso não afeta a planilha oficial.'))return;state=fresh();persist();notify('Dados locais apagados.');navigate('inicio')}
 document.body.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+ if(b.dataset.operation){activeOperation=b.dataset.operation;entryMode='rapido';navigate('registrar');return}
+ if(b.dataset.entry){entryMode=b.dataset.entry;register();return}
  if(b.dataset.route){navigate(b.dataset.route);return}
  if(b.id==='btn-settings'){navigate('ajustes');return}
  if(b.dataset.sample){const t=document.querySelector('#natural-text');if(t){t.value=b.dataset.sample;showInterpret(t.value)}return}
@@ -102,7 +166,17 @@ document.body.addEventListener('click',e=>{const b=e.target.closest('button');if
  if(b.dataset.del){if(!confirm('Excluir somente este rascunho local?'))return;state.drafts=state.drafts.filter(d=>d.id!==b.dataset.del);persist();render();notify('Rascunho removido.');return}
  switch(b.dataset.do){case'export':exportData();return;case'clear':clearData();return;case'snapshot':route='snapshot';snapshot();return;case'install':if(installedPrompt){installedPrompt.prompt();installedPrompt.userChoice.finally(()=>{installedPrompt=null})}else notify('No Chrome Android: menu ⋮ → Instalar app / Adicionar à tela inicial.');return}
 });
-document.body.addEventListener('submit',e=>{e.preventDefault();if(e.target.id==='natural-form')showInterpret(e.target.querySelector('#natural-text').value);else if(e.target.id==='draft-form')handleSaveDraft(e.target);else if(e.target.id==='query-form')showQuery(e.target.querySelector('#query-text').value);else if(e.target.id==='snapshot-form')saveSnapshot(e.target)});
+document.body.addEventListener('change',e=>{
+ if(e.target.matches('#quick-operation')){
+  const previous=Object.fromEntries(new FormData(e.target.form));activeOperation=e.target.value;renderQuick(previous);
+ }
+ if(e.target.matches('#quick-bank')){
+  const account=document.querySelector('#quick-account');
+  const match={'Mercado Pago':'Mercado Pago — saldo','Inter':'Inter','Outro banco/instituição':'Outro banco/conta'};
+  if(account && !account.value)account.value=match[e.target.value]||'';
+ }
+});
+document.body.addEventListener('submit',e=>{e.preventDefault();if(e.target.id==='quick-form')saveQuick(e.target);else if(e.target.id==='natural-form')showInterpret(e.target.querySelector('#natural-text').value);else if(e.target.id==='draft-form')handleSaveDraft(e.target);else if(e.target.id==='query-form')showQuery(e.target.querySelector('#query-text').value);else if(e.target.id==='snapshot-form')saveSnapshot(e.target)});
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installedPrompt=e});
 window.addEventListener('appinstalled',()=>{installedPrompt=null;notify('Aplicativo adicionado à tela inicial!')});
 if('serviceWorker'in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('./sw.js').catch(()=>{});
