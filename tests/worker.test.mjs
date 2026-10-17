@@ -84,3 +84,12 @@ test('HML scenario yields 4 transactions and balances 3500/2000/1000 with replay
  const r=await call('/api/hml/summary');assert.equal(r.transactions.length,4);assert.deepEqual(r.balances.map(x=>x.balanceCents).sort((a,b)=>a-b),[2000,3500]);assert.equal(r.investments[0].principalCents,1000);assert.equal(r.invalidTransactions,0);
  assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0);
 });
+
+test('verified profile exposes stable owner and balances keep ledger separate from confirmations',async()=>{
+ const {seed,call,env,db}=setup();seed();assert.equal((await call('/api/me')).userId,uid);env.ENABLE_FINANCIAL_WRITES='true';await call('/api/transactions',expense());env.ENABLE_FINANCIAL_WRITES='false';
+ const insert=db.prepare('INSERT INTO balance_snapshots(id,user_id,account_id,as_of_utc,balance_cents,source) VALUES(?,?,?,?,?,?)');
+ insert.run('older',uid,'bank-a','2025-12-01T00:00:00Z',10000,'manual');insert.run('latest',uid,'bank-a','2026-01-01T00:00:00Z',20000,'bank');insert.run('conflicting',uid,'bank-a','2026-01-01T00:00:00Z',21000,'manual');
+ const r=await call('/api/balances');assert.equal(r.status,200);const a=r.accounts.find(a=>a.id==='bank-a');assert.equal(a.ledgerDeltaCents,-3500);assert.equal(a.reconciledBalanceCents,null);assert.equal(a.reconciliationStatus,'required');assert.equal(a.confirmedSnapshots.length,2);assert.ok(!a.confirmedSnapshots.some(s=>s.id==='older'));
+ const empty=r.accounts.find(a=>a.id==='bank-b');assert.equal(empty.ledgerDeltaCents,0);assert.equal(empty.reconciliationStatus,'no_snapshot');assert.ok(!r.accounts.some(a=>a.kind==='system'));
+ db.prepare('INSERT INTO users(id,google_sub) VALUES(?,?)').run('google:987654321','987654321');assert.deepEqual((await call('/api/balances',undefined,{sub:'987654321'})).accounts,[]);
+});

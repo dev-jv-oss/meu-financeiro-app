@@ -1,5 +1,5 @@
 /* Modelo de registros locais v1.2. Sem acesso a banco, planilha ou rede. */
-import {round2} from './parser.mjs?v=1.9.1-audit';
+import {round2} from './parser.mjs?v=1.9.2-audit';
 export const TYPES=['despesa','receita','cofrinho','transferencia','aplicacao','recarga'];
 // Os valores canônicos permanecem compatíveis com os rascunhos e parser anteriores.
 export const ACCOUNTS=['Inter','Mercado Pago — saldo','Dinheiro','Outro banco/conta'];

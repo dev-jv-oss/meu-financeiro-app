@@ -134,3 +134,7 @@ O usuário autorizou explicitamente enviar somente a branch e abrir PR em rascun
 - Oito suítes fornecidas passaram: cartões, interpretador V10, rota V11, variações de cofrinho V12, integração, automação, aprovação de cofrinhos e respostas V14. Os logs estão em `docs/evidence/apps-script-tests.txt`. São testes lógicos com `Utilities.formatDate` adaptado para Intl, não execução hospedada no Google.
 - Runner reproduzível: `node tools/test-apps-script-local.mjs /pasta/dos/anexos`. Os arquivos originais não foram incorporados ao repositório público, pois contêm referências privadas de planilha. O runner bloqueia serviços de planilha, propriedades, locks, gatilhos e rede; não invoca ativação/publicação.
 - As 24 verificações do aplicativo/API permanecem uma suíte separada. Os scripts originais `test_worker.mjs` e `test_front.mjs` ainda não foram fornecidos; os testes Apps Script não os substituem.
+
+## Continuação 1.9.2
+
+A03 avançou para preparação local durável por titular, sem envio. O endpoint de saldos separa livro e confirmações; conciliação continua pendente. Suíte atual: 39 testes, com fake-indexeddb como dependência de desenvolvimento. Detalhes e limites em [FILA-OFFLINE.md](FILA-OFFLINE.md). O resultado anterior de 24 testes permanece como evidência da primeira etapa.

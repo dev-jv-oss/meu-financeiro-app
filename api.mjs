@@ -1,5 +1,5 @@
 /* Meu Financeiro 1.9 — Google Identity Services + API D1 HOMOLOGAÇÃO. */
-import {APP_CONFIG} from './app-config.js?v=1.9.1-audit';
+import {APP_CONFIG} from './app-config.js?v=1.9.2-audit';
 let idToken='',verifiedProfile=null,currentClient='',authListener=null,errorListener=null;
 const pattern=/^\d{6,}-[a-z0-9-]+\.apps\.googleusercontent\.com$/i;
 export const getApiUrl=()=>APP_CONFIG.apiBaseUrl;
@@ -19,7 +19,8 @@ function errDescription(r,body){
  const map={AUTH_NOT_CONFIGURED:'Confirme GOOGLE_CLIENT_ID e GOOGLE_ALLOWED_EMAIL no Worker.',IDENTITY_NOT_ALLOWED:'Conta Google não autorizada. Confira o e-mail permitido e o Client ID nas variáveis do Worker.',INVALID_TOKEN:'Token Google inválido. Faça login novamente.',UNKNOWN_SIGNING_KEY:'Não foi possível validar a assinatura do Google agora.',SETUP_REQUIRED:'Seu perfil ainda não existe no D1. Use o botão Preparar perfil.',WRITES_DISABLED:'Gravações financeiras desativadas em homologação.'};
  return map[body?.error]||String(body?.message||body?.error||`Falha HTTP ${r.status}`).slice(0,250);
 }
-export async function apiRequest(route,{method='GET',data}={}){
+export async function apiRequest(route,{method='GET',data,owner}={}){
+ if(owner&&verifiedProfile?.userId!==owner)throw Object.assign(Error('O titular da fila não corresponde ao login atual.'),{status:401,code:'OWNER_CHANGED'});
  if(!idToken)throw Error('Primeiro entre com sua conta Google.');
  if(!/^\/api\/(?:[a-z-]+|hml\/[a-z-]+)$/.test(route))throw Error('Rota não permitida no aplicativo.');
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),18000);
@@ -29,7 +30,7 @@ export async function apiRequest(route,{method='GET',data}={}){
   const response=await fetch(getApiUrl()+route,options);
   let result;try{result=await response.json()}catch{throw Error('Resposta inválida do servidor. Consulte o resultado antes de repetir a operação.')}
   if(!result||typeof result!=='object'||Array.isArray(result))throw Error('Resposta inválida do servidor.');
-  if(!response.ok){if(response.status===401)logoff();throw Error(errDescription(response,result));}
+  if(!response.ok){if(response.status===401)logoff();throw Object.assign(Error(errDescription(response,result)),{status:response.status,code:result.error});}
   return result;
  }catch(e){if(e?.name==='AbortError')throw Error('Tempo de resposta esgotado; consulte o resultado antes de repetir; não crie outra operação.');throw e}
  finally{clearTimeout(timer)}

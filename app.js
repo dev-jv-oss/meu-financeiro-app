@@ -1,10 +1,11 @@
-import {openLocalStore} from './storage.mjs?v=1.9.1-audit';
-import {configured,connected,email,profile,mountGoogle,apiRequest,bootstrapProfile,logoff,storeClientId,getClientId,getApiUrl} from './api.mjs?v=1.9.1-audit';
-import {interpret,money,norm,round2} from './parser.mjs?v=1.9.1-audit';
-import {makeDraft,TYPES,ACCOUNT_OPTIONS,OTHER_ACCOUNT,POCKETS,EXPENSE_CATS,INCOME_CATS,METHODS,INVESTMENTS,BANKS,BANK_OPTIONS,OTHER_BANK,formatCentavos} from './operacoes.mjs?v=1.9.1-audit';
-import {localPosition,migrate,active,canon,isValidName,positionOverview,getPosition,pocketBalance,investmentBalance,mayArchive,canDelete,displayPocket,displayBank,YIELD_MODES,validateYield,yieldLabel} from './catalogo.mjs?v=1.9.1-audit';
-import {estimatePosition,positionDisplay,validateConditions,liquidityModes,settlementModes,validISO,daysBetween,defaultTax} from './rendimentos.mjs?v=1.9.1-audit';
-const VERSION='1.9.1-audit-transactions-hml';
+import {mountQueue,sourceProtected} from './queue-ui.mjs?v=1.9.2-audit';
+import {openLocalStore} from './storage.mjs?v=1.9.2-audit';
+import {configured,connected,email,profile,mountGoogle,apiRequest,bootstrapProfile,logoff,storeClientId,getClientId,getApiUrl} from './api.mjs?v=1.9.2-audit';
+import {interpret,money,norm,round2} from './parser.mjs?v=1.9.2-audit';
+import {makeDraft,TYPES,ACCOUNT_OPTIONS,OTHER_ACCOUNT,POCKETS,EXPENSE_CATS,INCOME_CATS,METHODS,INVESTMENTS,BANKS,BANK_OPTIONS,OTHER_BANK,formatCentavos} from './operacoes.mjs?v=1.9.2-audit';
+import {localPosition,migrate,active,canon,isValidName,positionOverview,getPosition,pocketBalance,investmentBalance,mayArchive,canDelete,displayPocket,displayBank,YIELD_MODES,validateYield,yieldLabel} from './catalogo.mjs?v=1.9.2-audit';
+import {estimatePosition,positionDisplay,validateConditions,liquidityModes,settlementModes,validISO,daysBetween,defaultTax} from './rendimentos.mjs?v=1.9.2-audit';
+const VERSION='1.9.2-audit-transactions-hml';
 const KEY='meu-financeiro-pwa-local-v1';
 const main=document.querySelector('#main');
 const toastEl=document.querySelector('#toast');
@@ -199,7 +200,7 @@ function saveQuick(form){
  const r=makeDraft(data,localISO(),{pockets:state.pockets.filter(p=>p.status==='active').map(p=>p.name).concat(created?[created.name]:[])});
  const feedback=document.querySelector('#quick-feedback');
  if(!r.ok){if(feedback)feedback.innerHTML=`<div class="notice">${esc(r.error)}</div>`;notify(r.error);return;}
- const d={...r.draft};d.id=newId('draft');d.createdAt=new Date().toISOString();d.state='EFETIVO LOCAL';d.syncStatus='LOCAL';d.source='app-v1.9.1-audit-form';
+ const d={...r.draft};d.id=newId('draft');d.createdAt=new Date().toISOString();d.state='EFETIVO LOCAL';d.syncStatus='LOCAL';d.syncEligibleVersion=1;d.source='app-v1.9.2-audit-form';
  const previous={...state,drafts:[...state.drafts],pockets:[...state.pockets],investments:[...state.investments]};
  if(created)state.pockets.push(created);
  if(data.operation==='aplicacao'&&data.investment==='__new__')state.investments.push(investment);
@@ -393,7 +394,7 @@ function syncEditFields(){const form=document.querySelector('#edit-draft-form');
  }
  const cash=form.querySelector('[name=account]')?.value==='Dinheiro',method=form.querySelector('[name=method]');if(method)method.disabled=cash;
 }
-function saveEditedDraft(form){const i=state.drafts.findIndex(x=>x.id===editingDraftId);if(i<0)return;const old=state.drafts[i];if(['IMPORTADO','REVISAO','ENVIANDO','ERRO','PROCESSANDO'].includes(old.syncStatus)){notify('Operação já enviada. Para corrigir um lançamento oficial é necessária retificação auditável.');return;}const raw=Object.fromEntries(new FormData(form)),val=num(raw.amount),kind=old.operation||old.kind;
+async function saveEditedDraft(form){const checkedId=editingDraftId;if(!await mayEditSource(checkedId)||editingDraftId!==checkedId)return;const i=state.drafts.findIndex(x=>x.id===editingDraftId);if(i<0)return;const old=state.drafts[i];if(['IMPORTADO','REVISAO','ENVIANDO','ERRO','PROCESSANDO'].includes(old.syncStatus)){notify('Operação já enviada. Para corrigir um lançamento oficial é necessária retificação auditável.');return;}const raw=Object.fromEntries(new FormData(form)),val=num(raw.amount),kind=old.operation||old.kind;
  if(!val||val>1000000000||!validISO(raw.date)||raw.date>localISO()){notify('Confira valor e data.');return}
  let d={...old,amount:val,date:raw.date,description:String(raw.description||'').trim()||old.description,note:String(raw.note||'').trim()};
  if(['despesa','receita','recarga','cofrinho','transferencia','aplicacao'].includes(kind)){
@@ -415,18 +416,22 @@ function saveEditedDraft(form){const i=state.drafts.findIndex(x=>x.id===editingD
  }
  state.drafts[i]=d;if(!persist()){state.drafts[i]=prior;for(const x of oldLotMap)x.asset.lots=x.lots;return}editingDraftId=null;notify('Registro atualizado.');navigate('rascunhos');}
 function syncLabel(d){const s=d.syncStatus||'LOCAL';return ({IMPORTADO:'Importado anteriormente (origem legada)',REVISAO:'Revisão de migração pendente',PROCESSANDO:'Status legado: revisar antes de migrar',ENVIANDO:'Status legado: conferir antes de migrar',ERRO:'Status legado incerto: revisar',LOCAL:'Registro somente neste aparelho — não enviado ao D1'})[s]||'Registro local';}
+async function mayEditSource(id){try{if(await sourceProtected(id)){notify('Registro com cópia preparada na fila: edição e exclusão bloqueadas até conciliação.');return false;}return true}catch(e){notify('Não foi possível verificar a fila. Alteração bloqueada para preservar o registro.');return false}}
 async function syncRecord(){notify('Envio de registros reais ao D1 desativado nesta versão. Nenhuma operação foi transmitida.');}
 async function readOfficial(){
  const target=document.querySelector('#official-summary');if(!target)return;
  target.textContent='Consultando D1 (somente leitura)...';
  try{
-  const [accounts,transactions,investments,integrity]=await Promise.all([
-   apiRequest('/api/accounts'),apiRequest('/api/transactions'),apiRequest('/api/investments'),apiRequest('/api/integrity')
+  const identity=email();
+  const [accounts,transactions,investments,integrity,balances]=await Promise.all([
+   apiRequest('/api/accounts'),apiRequest('/api/transactions'),apiRequest('/api/investments'),apiRequest('/api/integrity'),apiRequest('/api/balances').catch(()=>null)
   ]);
+  if(identity!==email()||!connected())return;
   const ac=accounts.accounts||[],tx=transactions.transactions||[],inv=investments.investments||[],bad=integrity.invalidTransactions||[];
-  target.innerHTML=`<div class="notice notice-blue"><b>Banco D1 de HOMOLOGAÇÃO — leitura</b><p>Contas: ${ac.length} · Lançamentos: ${tx.length} · Investimentos: ${inv.length} · Inconsistências: ${bad.length}</p></div>
+  target.innerHTML=`<div class="notice notice-blue"><b>Banco D1 de HOMOLOGAÇÃO — leitura</b><p>Contas: ${ac.length} · Lançamentos consultados (até 100): ${tx.length} · Investimentos: ${inv.length} · Inconsistências: ${bad.length}</p></div>
    ${ac.length?`<p class="small">Contas encontradas:</p>${ac.map(x=>`<p class="small">${esc(x.name)} · ${esc(x.kind)}</p>`).join('')}`:''}
    ${tx.length?`<p class="small">Últimos registros:</p>${tx.slice(0,10).map(x=>`<p class="small">${esc(x.effectiveDate)} · ${esc(x.description)} · ${money((x.amountCents||0)/100)}</p>`).join('')}`:'<p class="small muted">Nenhuma movimentação no D1 ainda. Isso é esperado nesta etapa.</p>'}
+   ${balances?.accounts?`<p class="small">Movimentação líquida no livro D1 (não é saldo conciliado):</p>${balances.accounts.map(a=>`<p class="small">${esc(a.name)}: ${money(a.ledgerDeltaCents/100)} · ${a.confirmedSnapshots.length} confirmação(ões) externa(s). Conciliação pendente.</p>`).join('')}`:'<p class="small">Consulta de saldos indisponível. A API candidata precisa ser validada separadamente.</p>'}
    ${bad.length?'<p class="notice">Foram identificadas inconsistências contábeis; não habilite gravações.</p>':''}`;
  }catch(e){target.textContent='Falha na consulta: '+String(e.message||e)}
 }
@@ -621,9 +626,10 @@ function settings(){const pr=profile(),cl=getClientId();
  <div class="flex-wrap-row mt-14"><button type="button" class="btn btn-secondary" data-do="verify-d1" ${connected()?'':'disabled'}>Verificar acesso</button><button type="button" class="btn btn-secondary" data-do="bootstrap-d1" ${connected()&&!pr?.registered?'':'disabled'}>Preparar meu perfil no D1</button><button type="button" class="btn btn-secondary" data-do="read-d1" ${connected()&&pr?.registered?'':'disabled'}>Consultar D1</button><button type="button" class="btn btn-ghost" data-do="logout">Sair</button></div>
  <p class="hint">${connected()?(pr?.registered?'Perfil cadastrado no D1.':'Identidade validada. Falta preparar perfil técnico no D1.'):'Os tokens Google não são armazenados no backup nem no navegador; será necessário novo login quando a página recarregar.'}</p>
  <div id="official-summary" aria-live="polite"></div><p class="hint">Esta versão não sincroniza lançamentos financeiros reais. Os testes fictícios usam rotas próprias e autorização separada.</p>`)}
+ ${card(`<h3>Fila local de preparação</h3><p class="small">Somente registros criados nesta candidata podem ser preparados. Envio financeiro desativado.</p><button class="btn btn-secondary" data-do="queue-local">Consultar fila deste titular</button><div id="queue-local" aria-live="polite"></div>`)}
  ${hmlTestsPanel(pr)}
  ${card(`<h3>Taxas de referência (opcional)</h3><p class="small muted">CDI informado manualmente para simulações locais. Não representa saldo bancário.</p><form id="reference-form"><div class="field"><label>CDI anual de referência (%)</label><input class="input" inputmode="decimal" name="cdiAnnual" placeholder="Ex.: 14,90" value="${esc(state.referenceRates?.cdiAnnual??'')}"></div><div class="field"><label>Data dessa referência</label><input class="input" type="date" name="cdiUpdatedAt" value="${esc(state.referenceRates?.cdiUpdatedAt||localISO())}"></div><button class="btn btn-secondary" type="submit">Guardar taxa de referência</button></form>`)}
- ${card(`<h3>Controle dos dados locais</h3><p class="small muted">Limpar dados do navegador apaga os registros. Faça backup antes de atualizar.</p><div class="flex-wrap-row"><button class="btn btn-secondary" data-do="export">Exportar backup completo</button><label class="btn btn-secondary backup-import" for="backup-file">Restaurar backup</label><input type="file" accept="application/json,.json" id="backup-file" class="sr-only"><button class="btn btn-red" data-do="clear">Apagar dados locais</button></div>`)}
+ ${card(`<h3>Controle dos dados locais</h3><p class="small muted">Limpar dados do navegador apaga os registros. Faça backup antes de atualizar.</p><div class="flex-wrap-row"><button class="btn btn-secondary" data-do="export">Exportar registros e cadastros locais</button><label class="btn btn-secondary backup-import" for="backup-file">Restaurar backup</label><input type="file" accept="application/json,.json" id="backup-file" class="sr-only"><button class="btn btn-red" data-do="clear">Apagar dados locais</button></div>`)}
  ${card(`<h3>Limites da homologação</h3><p class="small muted">As movimentações reais continuam locais e não são enviadas ao D1. Somente as operações fictícias do painel de homologação estão habilitadas.</p>`)}
  `;
  const googleEl=document.querySelector('#google-login-area');if(googleEl)mountGoogle(googleEl,()=>{notify('Login Google validado pelo servidor.');settings();},msg=>{notify('Falha no login Google.');const x=document.querySelector('#auth-status');if(x)x.textContent='Não autorizado: '+msg;});
@@ -650,7 +656,7 @@ function saveSnapshot(form){
 }
 function exportData(){if(localStore.blocked){const bytes=localStore.originalBytes;if(typeof bytes!=='string'){notify('Não foi possível acessar os dados para exportar. Não limpe o armazenamento.');return;}const url=URL.createObjectURL(new Blob([bytes],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='meu-financeiro-recuperacao-original.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200);return;}const payload={format:'meu-financeiro-pwa-v1.6',createdAt:new Date().toISOString(),warning:'Dados locais, não publicados no controle oficial. Armazene o backup em local seguro.',drafts:state.drafts,snapshot:state.snapshot,pockets:state.pockets,investments:state.investments,referenceRates:state.referenceRates||{}};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='meu-financeiro-backup-v1.6.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200)}
 function clearData(){notify('Exclusão total bloqueada durante a auditoria. Exporte um backup para preservar seus registros.');return;}
-document.body.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+document.body.addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;
  if(b.dataset.operation){activeOperation=b.dataset.operation;entryMode='rapido';navigate('registrar');return}
  if(b.dataset.entry){entryMode=b.dataset.entry;register();return}
  if(b.dataset.route){navigate(b.dataset.route);return}
@@ -659,13 +665,13 @@ document.body.addEventListener('click',e=>{const b=e.target.closest('button');if
  if(b.dataset.query){const x=document.querySelector('#query-text');x.value=b.dataset.query;showQuery(x.value);return}
  if(b.dataset.assetAct){actionCatalog(b.dataset.assetKind,b.dataset.assetId,b.dataset.assetAct);return}
  if(b.dataset.sync){void syncRecord(b.dataset.sync);return}
- if(b.dataset.edit){editingDraftId=b.dataset.edit;navigate('editar-registro');return}
+ if(b.dataset.edit){if(!await mayEditSource(b.dataset.edit))return;editingDraftId=b.dataset.edit;navigate('editar-registro');return}
  if(b.dataset.lotDelete){removeLot(b.dataset.lotKind,b.dataset.lotAsset,b.dataset.lotDelete);return}
- if(b.dataset.del){const rec=state.drafts.find(d=>d.id===b.dataset.del);if(!rec||rec.syncStatus&&rec.syncStatus!=='LOCAL')return;
+ if(b.dataset.del){if(!await mayEditSource(b.dataset.del))return;const rec=state.drafts.find(d=>d.id===b.dataset.del);if(!rec||rec.syncStatus&&rec.syncStatus!=='LOCAL')return;
   if(!confirm('Excluir este registro e o aporte-base vinculado, quando existir? Isso não estorna operações no banco.'))return;
   for(const a of [...state.pockets,...state.investments])a.lots=(a.lots||[]).filter(l=>l.sourceDraftId!==rec.id);
   state.drafts=state.drafts.filter(d=>d.id!==b.dataset.del);persist();render();notify('Registro local excluído.');return}
- switch(b.dataset.do){case'hml-refresh':void refreshHmlTests();return;case'hml-step':void doHmlStep(b.dataset.hmlStep);return;case'hml-repeat':void resendHmlOperation();return;case'create-test-account':void createD1TestAccount();return;case'read-d1':void readOfficial();return;case'verify-d1':void verifyD1();return;case'bootstrap-d1':void createD1Profile();return;case'official-summary':void readOfficial();return;case'logout':logoff();settings();return;case'export':exportData();return;case'clear':clearData();return;case'snapshot':route='snapshot';snapshot();return;case'install':if(installedPrompt){installedPrompt.prompt();installedPrompt.userChoice.finally(()=>{installedPrompt=null})}else notify('No Chrome Android: menu ⋮ → Instalar app / Adicionar à tela inicial.');return}
+ switch(b.dataset.do){case'queue-local':void mountQueue(document.querySelector('#queue-local'),{profile,apiRequest,apiOrigin:getApiUrl(),drafts:()=>state.drafts,notify});return;case'hml-refresh':void refreshHmlTests();return;case'hml-step':void doHmlStep(b.dataset.hmlStep);return;case'hml-repeat':void resendHmlOperation();return;case'create-test-account':void createD1TestAccount();return;case'read-d1':void readOfficial();return;case'verify-d1':void verifyD1();return;case'bootstrap-d1':void createD1Profile();return;case'official-summary':void readOfficial();return;case'logout':logoff();settings();return;case'export':exportData();return;case'clear':clearData();return;case'snapshot':route='snapshot';snapshot();return;case'install':if(installedPrompt){installedPrompt.prompt();installedPrompt.userChoice.finally(()=>{installedPrompt=null})}else notify('No Chrome Android: menu ⋮ → Instalar app / Adicionar à tela inicial.');return}
 });
 document.body.addEventListener('change',e=>{
  if(e.target.matches('#quick-operation')){

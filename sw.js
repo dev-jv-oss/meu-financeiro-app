@@ -1,9 +1,9 @@
 /* Atomic app shell: no activation over an open older client, no mixed network modules. */
-const CACHE='meu-financeiro-pwa-v1.9.1-audit';
+const CACHE='meu-financeiro-pwa-v1.9.2-audit';
 const ROOT=new URL('./',self.location.href);
-const CORE=['./','./index.html','./styles.css?v=1.9.1-audit','./bootstrap.js?v=1.9.1-audit','./app.js?v=1.9.1-audit',
- './parser.mjs?v=1.9.1-audit','./operacoes.mjs?v=1.9.1-audit','./catalogo.mjs?v=1.9.1-audit','./rendimentos.mjs?v=1.9.1-audit',
- './api.mjs?v=1.9.1-audit','./app-config.js?v=1.9.1-audit','./storage.mjs?v=1.9.1-audit','./manifest.webmanifest'];
+const CORE=['./','./index.html','./styles.css?v=1.9.2-audit','./bootstrap.js?v=1.9.2-audit','./app.js?v=1.9.2-audit',
+ './parser.mjs?v=1.9.2-audit','./operacoes.mjs?v=1.9.2-audit','./catalogo.mjs?v=1.9.2-audit','./rendimentos.mjs?v=1.9.2-audit',
+ './api.mjs?v=1.9.2-audit','./app-config.js?v=1.9.2-audit','./storage.mjs?v=1.9.2-audit','./manifest.webmanifest','./queue-ui.mjs?v=1.9.2-audit','./outbox.mjs?v=1.9.2-audit','./sync-payload.mjs?v=1.9.2-audit'];
 const OPTIONAL=['./icons/logo-mark.svg','./icons/icon-192.png','./icons/icon-512.png','./icons/icon-maskable-192.png','./icons/icon-maskable-512.png','./icons/icon-180.png'];
 self.addEventListener('install',e=>e.waitUntil((async()=>{
  const cache=await caches.open(CACHE);

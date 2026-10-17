@@ -241,10 +241,26 @@ async function handle(request,env){
  if(!pathname.startsWith('/api/'))fail(404,'NOT_FOUND','Rota inexistente.');
  const identity=await googleIdentity(request,env),u=identity.userId;
  if(pathname==='/api/me'&&method==='GET'){
-   const user=await env.DB.prepare('SELECT id,email FROM users WHERE id=?').bind(u).first();return json({authenticated:true,registered:!!user,email:identity.email,financialWrites:env.ENABLE_FINANCIAL_WRITES==='true',accountSetup:env.ENABLE_ACCOUNT_SETUP==='true',hmlTests:env.ENABLE_HML_TESTS==='true'&&env.ENABLE_FINANCIAL_WRITES!=='true'});
+   const user=await env.DB.prepare('SELECT id,email FROM users WHERE id=?').bind(u).first();return json({authenticated:true,userId:u,registered:!!user,email:identity.email,financialWrites:env.ENABLE_FINANCIAL_WRITES==='true',accountSetup:env.ENABLE_ACCOUNT_SETUP==='true',hmlTests:env.ENABLE_HML_TESTS==='true'&&env.ENABLE_FINANCIAL_WRITES!=='true'});
  }
  if(pathname==='/api/bootstrap'&&method==='POST')return bootstrap(env,identity);
  await requireUser(env,identity);
+ // Ledger activity and external confirmations are deliberately separate: no implicit opening balance.
+ if(pathname==='/api/balances'&&method==='GET'){
+   const rs=await env.DB.prepare(`SELECT a.id,a.name,a.kind,a.status,
+     COALESCE((SELECT SUM(p.delta_cents) FROM ledger_postings p WHERE p.user_id=a.user_id AND p.account_id=a.id),0) AS ledgerDeltaCents,
+     s.id AS snapshotId,s.as_of_utc AS asOfUtc,s.balance_cents AS confirmedBalanceCents,s.source
+     FROM accounts a LEFT JOIN balance_snapshots s ON s.user_id=a.user_id AND s.account_id=a.id
+       AND NOT EXISTS (SELECT 1 FROM balance_snapshots newer WHERE newer.user_id=s.user_id AND newer.account_id=s.account_id AND julianday(newer.as_of_utc)>julianday(s.as_of_utc))
+     WHERE a.user_id=? AND a.kind<>'system' ORDER BY a.id,s.id`).bind(u).all();
+   const accounts=new Map();
+   for(const r of rs.results||[]){
+     if(!Number.isSafeInteger(r.ledgerDeltaCents)||(r.snapshotId&&!Number.isSafeInteger(r.confirmedBalanceCents)))fail(409,'UNSAFE_BALANCE','Saldo fora da faixa segura; exige revisão.');
+     if(!accounts.has(r.id))accounts.set(r.id,{id:r.id,name:r.name,kind:r.kind,status:r.status,ledgerDeltaCents:r.ledgerDeltaCents,confirmedSnapshots:[],reconciledBalanceCents:null,reconciliationStatus:'no_snapshot'});
+     const a=accounts.get(r.id);if(r.snapshotId){a.confirmedSnapshots.push({id:r.snapshotId,asOfUtc:r.asOfUtc,balanceCents:r.confirmedBalanceCents,source:r.source});a.reconciliationStatus='required';}
+   }
+   return json({accounts:[...accounts.values()],note:'Movimentação contabilizada e confirmações externas separadas. Saldo conciliado ainda não disponível.'});
+ }
  if(pathname==='/api/accounts'&&method==='GET'){const rs=await env.DB.prepare('SELECT id,name,kind,institution,status FROM accounts WHERE user_id=? AND kind<>\'system\' ORDER BY name').bind(u).all();return json({accounts:rs.results||[]});}
  if(pathname==='/api/transactions'&&method==='GET'){const rs=await env.DB.prepare('SELECT id,client_operation_id AS clientOperationId,kind,effective_date AS effectiveDate,description,amount_cents AS amountCents,status,created_at AS createdAt FROM transactions WHERE user_id=? ORDER BY effective_date DESC,created_at DESC LIMIT 100').bind(u).all();return json({transactions:rs.results||[]});}
  if(pathname==='/api/investments'&&method==='GET'){const rs=await env.DB.prepare('SELECT p.id,p.name,p.product_type AS productType,p.yield_mode AS yieldMode,p.contracted_rate AS contractedRate,p.liquidity,p.grace_days AS graceDays,p.status,a.id AS accountId,COALESCE(SUM(l.remaining_principal_cents),0) AS principalCents FROM investment_products p JOIN accounts a ON a.id=p.account_id AND a.user_id=p.user_id LEFT JOIN investment_lots l ON l.product_id=p.id AND l.user_id=p.user_id WHERE p.user_id=? GROUP BY p.id ORDER BY p.name').bind(u).all();return json({investments:rs.results||[],note:'Principal contabilizado; rendimento estimado ainda nao implementado.'});}

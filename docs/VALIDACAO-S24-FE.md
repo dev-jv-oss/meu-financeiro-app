@@ -37,3 +37,7 @@ Não executar rollback de banco como resposta automática a erro de interface. P
 ## Pendências para aceite
 
 Fila persistente por usuário, mapeamento de contas, saldos D1 conciliados, lotes de aporte/resgate, passivos/cartões, importação idempotente e E2E real. Enquanto pendentes, a versão continua sendo candidata de auditoria.
+
+## Preparação local 1.9.2 — somente em homologação autorizada
+
+Com backup preservado, usar uma instalação de teste separada da PWA real. Criar registro fictício pelo formulário rápido, entrar com conta de teste e abrir Ajustes → Fila local de preparação. Consultar contas, selecionar origem/destino e preparar. Confirmar que nenhuma rota de transação foi chamada, que o original continua visível e que editar/excluir fica bloqueado. Exportar também a fila. Reabrir, testar duas abas, modo avião, login de outro titular e atualização entre versões. Não executar o motor de envio. A API candidata precisa estar disponível nesse ambiente para retornar userId; a versão implantada pode não ter esse contrato. Estes testes no aparelho ainda NÃO foram executados.
