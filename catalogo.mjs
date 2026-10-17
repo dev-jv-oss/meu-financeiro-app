@@ -1,4 +1,4 @@
-import {positionDisplay} from './rendimentos.mjs?v=1.5.1';
+import {positionDisplay} from './rendimentos.mjs?v=1.7.0';
 /** Patrimônio local. Compatível com o armazenamento da v1.0/v1.2.
  * Saldo não é inferido de rascunhos: apenas posição manual confirmada pelo usuário. */
 export const DEFAULT_POCKETS = [
@@ -50,7 +50,7 @@ export function positionOverview(state,today){
  const s=state.snapshot;
  const mp=getPosition(s,'mp'),inter=getPosition(s,'inter'),cash=getPosition(s,'cash');
  const banks=sumKnown([mp,inter]);
- const valuation=(p,manual)=>today?positionDisplay(p,manual,today,state.referenceRates||{}):{value:manual,source:'confirmed'};
+ const valuation=(p,manual)=>{const v=today?positionDisplay(p,manual,today,state.referenceRates||{}):{value:manual,source:'confirmed'};if(v.value==null&&p.lots?.length){const principal=Math.round(p.lots.reduce((n,l)=>n+Number(l.amount||0),0)*100)/100;return {...v,value:principal,source:'principal',projectionError:'Capital registrado; rendimento ainda não calculável.'};}return v};
  const pockets=active(state.pockets).map(p=>{const v=valuation(p,pocketBalance(state,p));return {...p,balance:v.value,projectionSource:v.source,projection:v};});
  const investments=active(state.investments).map(p=>{const v=valuation(p,investmentBalance(state,p));return {...p,balance:v.value,projectionSource:v.source,projection:v};});
  const reserved=sumKnown([...pockets.map(p=>p.balance),...investments.map(a=>a.balance)]);

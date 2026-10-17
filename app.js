@@ -1,8 +1,9 @@
-import {interpret,money,norm,round2} from './parser.mjs?v=1.5.1';
-import {makeDraft,TYPES,ACCOUNT_OPTIONS,OTHER_ACCOUNT,POCKETS,EXPENSE_CATS,INCOME_CATS,METHODS,INVESTMENTS,BANKS,BANK_OPTIONS,OTHER_BANK,formatCentavos} from './operacoes.mjs?v=1.5.1';
-import {migrate,active,canon,isValidName,positionOverview,getPosition,pocketBalance,investmentBalance,mayArchive,canDelete,displayPocket,displayBank,YIELD_MODES,validateYield,yieldLabel} from './catalogo.mjs?v=1.5.1';
-import {estimatePosition,positionDisplay,validateConditions,liquidityModes,settlementModes,validISO,daysBetween,defaultTax} from './rendimentos.mjs?v=1.5.1';
-const VERSION='1.5.1-local';
+import {configured,connected,email,profile,mountGoogle,apiRequest,bootstrapProfile,logoff,storeClientId,getClientId,getApiUrl} from './api.mjs?v=1.7.0';
+import {interpret,money,norm,round2} from './parser.mjs?v=1.7.0';
+import {makeDraft,TYPES,ACCOUNT_OPTIONS,OTHER_ACCOUNT,POCKETS,EXPENSE_CATS,INCOME_CATS,METHODS,INVESTMENTS,BANKS,BANK_OPTIONS,OTHER_BANK,formatCentavos} from './operacoes.mjs?v=1.7.0';
+import {migrate,active,canon,isValidName,positionOverview,getPosition,pocketBalance,investmentBalance,mayArchive,canDelete,displayPocket,displayBank,YIELD_MODES,validateYield,yieldLabel} from './catalogo.mjs?v=1.7.0';
+import {estimatePosition,positionDisplay,validateConditions,liquidityModes,settlementModes,validISO,daysBetween,defaultTax} from './rendimentos.mjs?v=1.7.0';
+const VERSION='1.7.0-auth-hml';
 const KEY='meu-financeiro-pwa-local-v1';
 const main=document.querySelector('#main');
 const toastEl=document.querySelector('#toast');
@@ -10,18 +11,18 @@ const esc=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':
 const maybeMoney=v=>v==null?'—':money(v);
 const num=v=>{let s=String(v??'').trim();if(!s)return null;s=s.replace(/R\$|\s/g,'');if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');else s=s.replace(',','.');const n=Number(s);return Number.isFinite(n)&&n>=0?round2(n):null};
 const fresh=()=>migrate({drafts:[],snapshot:null});
-function load(){try{let s=JSON.parse(localStorage.getItem(KEY)||'null');return migrate(s)}catch(_){return fresh()}}
+function load(){try{let s=migrate(JSON.parse(localStorage.getItem(KEY)||'null'));for(const d of s.drafts)if(d.syncStatus==='ENVIANDO')d.syncStatus='ERRO';return s}catch(_){return fresh()}}
 let state=load(),editingDraftId=null,route='inicio',pending=null,installedPrompt=null,activeOperation='despesa',entryMode='rapido';
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(state));return true}catch(_){notify('Não foi possível salvar. Verifique o armazenamento do navegador.');return false}}
 function notify(t){toastEl.textContent=t;toastEl.classList.add('show');clearTimeout(notify._id);notify._id=setTimeout(()=>toastEl.classList.remove('show'),4000)}
 function navigate(r){route=r;pending=null;document.querySelectorAll('[data-route]').forEach(x=>x.classList.toggle('selected',x.dataset.route===r));render();window.scrollTo({top:0,behavior:'instant'})}
 const card=(html)=>`<div class="card">${html}</div>`;
 const label=(s)=>`<span class="eyebrow">${s}</span>`;
-const alert=`<div class="quiet-notice"><span class="lock" aria-hidden="true">◇</span><div><b>Modo local:</b> rascunhos e valores somente neste aparelho. Sem sincronização ou alterações na planilha.</div></div>`;
+const alert=`<div class="quiet-notice"><span class="lock" aria-hidden="true">◇</span><div><b>Controle de origem:</b> a sincronização com a planilha é mostrada em cada registro. Saldos locais não são saldos bancários online.</div></div>`;
 const pictos={despesa:'<path d="M6 18 18 6M8 6h10v10"/>',receita:'<path d="M6 6 18 18M18 8v10H8"/>',cofrinho:'<path d="M5 8h14v10H5zM9 12h6M9 5h6"/>',transferencia:'<path d="M4 8h16m-5-4 5 4-5 4M20 16H4m5-4-5 4 5 4"/>',aplicacao:'<path d="M4 20V12h4v8m4 0V8h4v12m4 0V4h2v16M3 20h20"/>',recarga:'<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',consultar:'<circle cx="12" cy="12" r="9"/><path d="M15 9c-.7-1-1.6-1.5-3-1.5-1.8 0-3 1-3 2.5 0 3.4 6 1.5 6 5 0 1.5-1.3 2.5-3 2.5-1.5 0-2.5-.6-3.3-1.7M12 5v14"/>'};
 const iconSVG=(key)=>`<svg viewBox="0 0 24 24" aria-hidden="true">${pictos[key]||pictos.consultar}</svg>`;
 const localISO=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
-function render(){switch(route){case'inicio':return home();case'registrar':return register();case'consultar':return consult();case'rascunhos':return drafts();case'ajustes':return settings();case'patrimonio':return patrimonio();case'editar-registro':return editDraft();default:home()}}
+function render(){const badge=document.querySelector('#net-status');if(badge){badge.innerHTML=connected()?'<span class="dot"></span> Conectado':'<span class="dot"></span> Local';}switch(route){case'inicio':return home();case'registrar':return register();case'consultar':return consult();case'rascunhos':return drafts();case'ajustes':return settings();case'patrimonio':return patrimonio();case'editar-registro':return editDraft();default:home()}}
 function balanceText(x){return x?.total==null?'—':money(x.total)}
 function balanceStatus(x){return x?.total==null?'Sem valores informados':x.partial?'Total parcial · dados manuais':'Valores informados manualmente'}
 function assetLine(name,value,extra=''){return `<div class="asset-line"><span class="asset-line-name">${esc(name)}${extra?`<small>${esc(extra)}</small>`:''}</span><strong class="money">${maybeMoney(value)}</strong></div>`}
@@ -39,7 +40,7 @@ function home(){const sp=state.snapshot,overview=positionOverview(state,localISO
   <details class="balance-panel"><summary><span><small>Disponível nos bancos</small><strong class="money">${balanceText(overview.banks)}</strong></span><span class="panel-chevron" aria-hidden="true">⌄</span></summary><div class="balance-detail">${mpLabel}${interLabel}<div class="balance-foot">${balanceStatus(overview.banks)}. Dinheiro em espécie é contado separadamente no total geral, quando informado.</div></div></details>
   <details class="balance-panel"><summary><span><small>Cofrinhos + investimentos</small><strong class="money">${balanceText(overview.reserved)}</strong></span><span class="panel-chevron" aria-hidden="true">⌄</span></summary><div class="balance-detail">${pockets||'<p class="small muted">Nenhum cofrinho ativo.</p>'}${investments}${overview.investments.length?'':'<p class="small muted">Sem investimentos cadastrados.</p>'}<div class="balance-foot">${balanceStatus(overview.reserved)}</div></div></details>
  </div>
- <div class="balance-links"><button class="mini-link" data-do="snapshot">Editar saldos</button><button class="mini-link" data-route="patrimonio">Gerenciar cofrinhos e investimentos →</button></div>
+ <div class="balance-links"><button class="mini-link" data-do="snapshot">Editar saldos</button><button class="mini-link" data-route="patrimonio">Ver patrimônio →</button></div>
  ${alert}
  <div class="section-title">O que vamos fazer?</div>
  <div class="quickgrid">${items.map(([id,title,subtitle,style])=>`<button type="button" class="quick ${style}" ${id==='consultar'?'data-route="consultar"':`data-operation="${id}"`}><span class="qicon">${iconSVG(id)}</span><strong>${title}</strong><span class="subtitle">${subtitle}</span></button>`).join('')}</div>
@@ -152,14 +153,14 @@ function renderQuick(preserve={}){const target=document.querySelector('#entry-ar
   fields+=accountField('Conta de origem / recebimento (confira)','account',ACCOUNT_OPTIONS.filter(([id])=>id!=='Dinheiro'));
   fields+=`<div class="explain-transfer">Aplicação: sai da conta para o investimento. Resgate: volta para a conta. O produto específico e os rendimentos precisarão de conferência.</div>`;
  }
- target.innerHTML=`<div class="card"><div class="form-hero"><span class="form-hero-icon">${{despesa:'↗',receita:'↘',cofrinho:'◇',transferencia:'⇄',aplicacao:'▥',recarga:'▣'}[op]}</span><div><div class="form-hero-title">${opLabels[op]}</div><div class="form-hero-copy">Preencha os campos abaixo para criar seu rascunho.</div></div></div><form id="quick-form" novalidate>
+ target.innerHTML=`<div class="card"><div class="form-hero"><span class="form-hero-icon">${{despesa:'↗',receita:'↘',cofrinho:'◇',transferencia:'⇄',aplicacao:'▥',recarga:'▣'}[op]}</span><div><div class="form-hero-title">${opLabels[op]}</div><div class="form-hero-copy">Registre uma movimentação já realizada.</div></div></div><form id="quick-form" novalidate>
   <div class="field"><label for="quick-operation">Tipo de operação</label>${sel('operation',typeOptions,op,'Selecione').replace('name="operation"','id="quick-operation" name="operation"')}</div>
   <div class="field"><label for="quick-amount">Valor (R$)</label><input id="quick-amount" class="input quick-amount" name="amount" inputmode="numeric" type="text" autocomplete="off" value="0,00" data-centavos required aria-describedby="amount-hint"><p class="hint" id="amount-hint">Digite apenas os números: 3590 vira 35,90.</p></div>
   ${fields}
   <details class="more-details"><summary>Data e observações</summary><div class="field"><label for="quick-date">Data da movimentação</label><input id="quick-date" class="input" type="date" name="date" value="${localISO()}" required></div><div class="field"><label for="quick-note">Observações (opcional)</label><textarea id="quick-note" class="textarea" name="note" maxlength="300" placeholder="Informações adicionais"></textarea></div></details>
   <div id="quick-feedback" role="alert" aria-live="polite"></div>
-  <div class="safety-tip"><span aria-hidden="true">◇</span><span>Você está salvando apenas um rascunho. Nenhum saldo bancário será alterado.</span></div>
-  <button class="btn btn-block" type="submit">Salvar rascunho →</button>
+  <div class="safety-tip"><span aria-hidden="true">◇</span><span>O registro é efetivo no controle local. A sincronização oficial depende de autenticação e de validação contábil; não movimenta seu banco.</span></div>
+  <button class="btn btn-block" type="submit">Registrar movimentação →</button>
  </form></div>`;
  for(const name of ['amount','date','note']){if(preserve[name]!=null){const input=target.querySelector(`[name="${name}"]`);if(input)input.value=name==='amount'?formatCentavos(preserve[name]):preserve[name];}}
  syncQuickConditional();syncFinanceFields(target);
@@ -197,13 +198,16 @@ function saveQuick(form){
  const r=makeDraft(data,localISO(),{pockets:state.pockets.filter(p=>p.status==='active').map(p=>p.name).concat(created?[created.name]:[])});
  const feedback=document.querySelector('#quick-feedback');
  if(!r.ok){if(feedback)feedback.innerHTML=`<div class="notice">${esc(r.error)}</div>`;notify(r.error);return;}
- const d={...r.draft};d.id=newId('draft');d.createdAt=new Date().toISOString();d.state='RASCUNHO LOCAL';d.source='app-v1.5-form';
+ const d={...r.draft};d.id=newId('draft');d.createdAt=new Date().toISOString();d.state='EFETIVO LOCAL';d.syncStatus='LOCAL';d.source='app-v1.7-form';
  const previous={...state,drafts:[...state.drafts],pockets:[...state.pockets],investments:[...state.investments]};
  if(created)state.pockets.push(created);
  if(data.operation==='aplicacao'&&data.investment==='__new__')state.investments.push(investment);
+ const asset=d.operation==='aplicacao'?investment:d.operation==='cofrinho'?(created||state.pockets.find(p=>p.id===d.pocketId)):null;
+ const oldLots=asset?[...(asset.lots||[])]:null;
+ if(asset&&d.direction==='aporte')asset.lots=[...(asset.lots||[]),{id:newId('lot'),amount:d.amount,date:d.date,sourceDraftId:d.id}];
  state.drafts.unshift(d);
- if(!persist()){state=previous;return}
- notify(r.warnings.length?'Salvo com marcação de revisão.':'Rascunho salvo neste aparelho.');navigate('rascunhos');
+ if(!persist()){if(asset)asset.lots=oldLots;state=previous;return}
+ notify('Movimentação salva somente neste aparelho. Envio ao D1 desativado.');navigate('rascunhos');
 }
 function saveLocalDraft(d){const previous=[...state.drafts];state.drafts.unshift(d);if(!persist()){state.drafts=previous;return false;}return true;}
 const kinds=[['despesa','Despesa'],['receita','Receita'],['transferencia','Transferência interna'],['revisao','Revisão especial']];
@@ -260,13 +264,13 @@ function niceDate(iso){if(!/^\d{4}-\d{2}-\d{2}$/.test(String(iso||'')))return St
 function patrimonio(){
  const o=positionOverview(state,localISO());
  const manager=(items,kind)=>items.map(item=>{
-  const confirmed=kind==='pocket'?pocketBalance(state,item):investmentBalance(state,item);const projection=positionDisplay(item,confirmed,localISO(),state.referenceRates||{});const bal=projection.value;
+  const confirmed=kind==='pocket'?pocketBalance(state,item):investmentBalance(state,item);const projection=positionDisplay(item,confirmed,localISO(),state.referenceRates||{});const bal=projection.value??((item.lots||[]).length?Math.round(item.lots.reduce((a,l)=>a+Number(l.amount||0),0)*100)/100:null);
   const count=state.drafts.filter(d=>kind==='pocket'?(d.pocketId===item.id||(!d.pocketId&&canon(d.pocket)===canon(item.name))):d.investmentId===item.id).length;
   const heading=kind==='investment'?`${item.type} · ${displayBank(item.bank)}`:'Cofrinho · Mercado Pago';
   const shown=kind==='pocket'?displayPocket(item.name):item.name;
   const rateText=yieldLabel(item);
   const started=item.startedAt?` · desde ${niceDate(item.startedAt)}`:' · data inicial não informada';
-  return `<div class="asset-manager"><div class="asset-row"><div><b>${esc(shown)}</b><small>${esc(heading)} · ${count} registro(s) local(is)${item.status==='archived'?' · Arquivado':''}</small><small>${esc(rateText+started)}</small></div><div class="asset-position"><strong class="money">${maybeMoney(bal)}</strong><small>${projection.source==='estimated'?'Líquido estimado':projection.source==='confirmed'?'Último confirmado':'Sem saldo'}</small></div></div>
+  return `<div class="asset-manager"><div class="asset-row"><div><b>${esc(shown)}</b><small>${esc(heading)} · ${count} registro(s) local(is)${item.status==='archived'?' · Arquivado':''}</small><small>${esc(rateText+started)}</small></div><div class="asset-position"><strong class="money">${maybeMoney(bal)}</strong><small>${projection.source==='estimated'?'Líquido estimado':projection.source==='confirmed'?'Último confirmado':'Capital informado / sem projeção'}</small></div></div>
   <details class="asset-manage-detail"><summary>Gerenciar</summary>
    <form class="rename-form" data-rename-kind="${kind}" data-rename-id="${esc(item.id)}"><div class="field"><label>Nome de exibição</label><input class="input" name="newName" value="${esc(shown)}" maxlength="80" required></div><div data-rate-set>${rateFields(item,'edit-'+item.id,kind)}</div><button class="btn btn-secondary" type="submit">Salvar cadastro</button></form>
   ${projection.source==='estimated'?`<div class="valuation-details"><div><span>Capital</span><b>${money(projection.principal)}</b></div><div><span>Bruto estimado</span><b>${money(projection.gross)}</b></div><div><span>IR estimado</span><b>− ${money(projection.ir)}</b></div><div><span>IOF estimado</span><b>− ${money(projection.iof)}</b></div><div><span>Elegível a D+0*</span><b>${money(projection.immediatelyAvailable)}</b></div><div><span>Último confirmado</span><b>${maybeMoney(confirmed)} · ${esc(state.snapshot?.date||'sem data')}</b></div></div><p class="hint">*D+0 indica prazo cadastrado; feriados, horários de corte e disponibilidade real não foram verificados. ${projection.approx?'Simulação aproximada; pode divergir do extrato bancário.':'Projeção matemática, não extrato bancário.'}</p>`:`<p class="notice">Projeção indisponível: ${esc(projection.projectionError||'sem dados')}. Valor exibido vem da última posição manual, quando existente.</p>`}
@@ -287,7 +291,7 @@ function patrimonio(){
  ${manager(active(state.investments),'investment')||'<p class="small muted">Nenhum investimento cadastrado.</p>'}
  <details class="new-asset"><summary>＋ Criar investimento</summary><form id="new-investment-form"><div class="field"><label>Nome do investimento</label><input name="name" class="input" required maxlength="80" placeholder="Ex.: CDB liquidez diária"></div>${fieldSelect('Instituição','bank',BANK_OPTIONS)}${otherField('bank','Nome da instituição')}${fieldSelect('Tipo','investmentType',INVESTMENTS)}<div data-rate-set>${rateFields(null,'create-investment','investment')}</div><button class="btn btn-block" type="submit">Cadastrar investimento</button></form></details></div>
  <details class="archived-assets"><summary>Cadastros arquivados (${state.pockets.filter(x=>x.status==='archived').length+state.investments.filter(x=>x.status==='archived').length})</summary>${manager(state.pockets.filter(x=>x.status==='archived'),'pocket')}${manager(state.investments.filter(x=>x.status==='archived'),'investment')||''}</details>
- <p class="secondary-note">Resgatar o valor total não arquiva automaticamente: nesta versão os lançamentos são apenas rascunhos. Após integração, o encerramento deverá ocorrer somente com saldo oficial conciliado e igual a zero.</p>`;syncFinanceFields(main);
+ <p class="secondary-note">Resgatar o valor total não arquiva automaticamente. Antes de encerrar, reconcilie a posição no controle oficial e confirme saldo zero.</p>`;syncFinanceFields(main);
 }
 function createCatalog(form,kind){
  const data=Object.fromEntries(new FormData(form)),name=(data.name||'').trim().replace(/\s+/g,' ');
@@ -388,7 +392,7 @@ function syncEditFields(){const form=document.querySelector('#edit-draft-form');
  }
  const cash=form.querySelector('[name=account]')?.value==='Dinheiro',method=form.querySelector('[name=method]');if(method)method.disabled=cash;
 }
-function saveEditedDraft(form){const i=state.drafts.findIndex(x=>x.id===editingDraftId);if(i<0)return;const old=state.drafts[i],raw=Object.fromEntries(new FormData(form)),val=num(raw.amount),kind=old.operation||old.kind;
+function saveEditedDraft(form){const i=state.drafts.findIndex(x=>x.id===editingDraftId);if(i<0)return;const old=state.drafts[i];if(['IMPORTADO','REVISAO','ENVIANDO','ERRO','PROCESSANDO'].includes(old.syncStatus)){notify('Operação já enviada. Para corrigir um lançamento oficial é necessária retificação auditável.');return;}const raw=Object.fromEntries(new FormData(form)),val=num(raw.amount),kind=old.operation||old.kind;
  if(!val||val>1000000000||!validISO(raw.date)||raw.date>localISO()){notify('Confira valor e data.');return}
  let d={...old,amount:val,date:raw.date,description:String(raw.description||'').trim()||old.description,note:String(raw.note||'').trim()};
  if(['despesa','receita','recarga','cofrinho','transferencia','aplicacao'].includes(kind)){
@@ -401,9 +405,34 @@ function saveEditedDraft(form){const i=state.drafts.findIndex(x=>x.id===editingD
   d={...d,...r.draft,id:old.id,createdAt:old.createdAt,source:old.source};
  }
  const prior=state.drafts[i];d.modifiedAt=new Date().toISOString();d.revisions=[...(old.revisions||[]),{at:d.modifiedAt,previous:{amount:old.amount,date:old.date,account:old.account,accountName:old.accountName,fromAccount:old.fromAccount,toAccount:old.toAccount,investmentId:old.investmentId,pocketId:old.pocketId,direction:old.direction,method:old.method,category:old.category,description:old.description,note:old.note}}];
- state.drafts[i]=d;if(!persist()){state.drafts[i]=prior;return}editingDraftId=null;notify('Rascunho atualizado.');navigate('rascunhos');}
+  const allAssets=[...state.investments,...state.pockets];
+ const oldLotMap=allAssets.map(a=>({asset:a,lots:[...(a.lots||[])]}));
+ for(const asset of allAssets)asset.lots=(asset.lots||[]).filter(l=>l.sourceDraftId!==old.id);
+ if(d.direction==='aporte'&&['cofrinho','aplicacao'].includes(d.operation)){
+  const nextAsset=d.operation==='cofrinho'?state.pockets.find(x=>x.id===d.pocketId):state.investments.find(x=>x.id===d.investmentId);
+  if(nextAsset)nextAsset.lots=[...(nextAsset.lots||[]),{id:newId('lot'),amount:d.amount,date:d.date,sourceDraftId:d.id}];
+ }
+ state.drafts[i]=d;if(!persist()){state.drafts[i]=prior;for(const x of oldLotMap)x.asset.lots=x.lots;return}editingDraftId=null;notify('Rascunho atualizado.');navigate('rascunhos');}
+function syncLabel(d){const s=d.syncStatus||'LOCAL';return ({IMPORTADO:'Importado anteriormente (origem legada)',REVISAO:'Revisao de migracao pendente',PROCESSANDO:'Status legado: revisar antes de migrar',ENVIANDO:'Status legado: conferir antes de migrar',ERRO:'Status legado incerto: revisar',LOCAL:'Registro somente neste aparelho — NAO enviado ao D1'})[s]||'Registro local';}
+async function syncRecord(){notify('Envio ao D1 desativado nesta versao. Nenhuma operacao foi transmitida.');}
+async function readOfficial(){
+ const target=document.querySelector('#official-summary');if(!target)return;
+ target.textContent='Consultando D1 (somente leitura)...';
+ try{
+  const [accounts,transactions,investments,integrity]=await Promise.all([
+   apiRequest('/api/accounts'),apiRequest('/api/transactions'),apiRequest('/api/investments'),apiRequest('/api/integrity')
+  ]);
+  const ac=accounts.accounts||[],tx=transactions.transactions||[],inv=investments.investments||[],bad=integrity.invalidTransactions||[];
+  target.innerHTML=`<div class="notice notice-blue"><b>Banco D1 de HOMOLOGACAO — leitura</b><p>Contas: ${ac.length} · Lancamentos: ${tx.length} · Investimentos: ${inv.length} · Inconsistencias: ${bad.length}</p></div>
+   ${ac.length?`<p class="small">Contas encontradas:</p>${ac.map(x=>`<p class="small">${esc(x.name)} · ${esc(x.kind)}</p>`).join('')}`:''}
+   ${tx.length?`<p class="small">Ultimos registros:</p>${tx.slice(0,10).map(x=>`<p class="small">${esc(x.effectiveDate)} · ${esc(x.description)} · ${money((x.amountCents||0)/100)}</p>`).join('')}`:'<p class="small muted">Nenhuma movimentacao no D1 ainda. Isso e esperado nesta etapa.</p>'}
+   ${bad.length?'<p class="notice">Foram identificadas inconsistencias contabeis; nao habilite gravacoes.</p>':''}`;
+ }catch(e){target.textContent='Falha na consulta: '+String(e.message||e)}
+}
+async function verifyD1(){try{const r=await apiRequest('/api/me');notify(r.authenticated?'Identidade confirmada pelo D1.':'O servidor nao confirmou a identidade.');settings()}catch(e){notify('Falha na verificacao: '+String(e.message||e));settings()}}
+async function createD1Profile(){if(!confirm('Criar seu perfil tecnico no banco D1 de HOMOLOGACAO? Isso nao importa registros nem habilita movimentacoes.'))return;try{await bootstrapProfile();notify('Perfil criado/confirmado no D1.');settings()}catch(e){notify('Falha ao preparar perfil: '+String(e.message||e))}}
 function drafts(){
- main.innerHTML=`<div class="page-intro">${label('Neste aparelho')}<h1 class="heading">Registros</h1><p class="lede">Registros locais ainda não contabilizados. Nenhum foi enviado à planilha oficial.</p></div>
+ main.innerHTML=`<div class="page-intro">${label('Neste aparelho')}<h1 class="heading">Registros</h1><p class="lede">Movimentacoes salvas neste aparelho. Ainda nao transmitidas ao banco D1.</p></div>
  ${alert}
  <div class="spaced section-title"><span>${state.drafts.length} registro(s)</span><button class="btn btn-ghost" data-do="export" ${state.drafts.length?'':'disabled'}>Exportar JSON</button></div>
  ${state.drafts.length?state.drafts.map(d=>{
@@ -411,9 +440,13 @@ function drafts(){
  const sign=kind==='receita'?'+':(kind==='despesa'||kind==='recarga')?'−':'';
  const amountClass=kind==='receita'?'receita':(kind==='despesa'||kind==='recarga')?'despesa':'';
  const picture={despesa:'↗',receita:'↘',cofrinho:'◇',transferencia:'⇄',aplicacao:'▥',recarga:'▣'}[kind]||'≡';
- return `<article class="draft"><div class="draft-head"><div class="draft-title"><span class="draft-icon ${esc(kind)}" aria-hidden="true">${picture}</span><div><h4>${esc(d.description||type)}</h4><div class="meta">${esc(type)} · ${esc(niceDate(d.date))}</div><div class="meta">${esc((d.pocketId&&displayPocket(state.pockets.find(p=>p.id===d.pocketId)?.name||d.pocket))||(d.investmentId&&state.investments.find(i=>i.id===d.investmentId)?.name)||d.recipient||d.pocket||displayBank(d.accountName)||d.category||'Registro local')}</div></div></div><div class="amount money ${amountClass}">${sign}${money(d.amount)}</div></div>${d.reviewRequired?'<div class="review-note">Pendente de revisão para integração</div>':''}<div class="draft-acts"><button type="button" class="btn btn-secondary" data-edit="${esc(d.id)}">Editar</button><button type="button" class="btn btn-red" data-del="${esc(d.id)}">Excluir</button></div></article>`;
+ return `<article class="draft"><div class="draft-head"><div class="draft-title"><span class="draft-icon ${esc(kind)}" aria-hidden="true">${picture}</span><div><h4>${esc(d.description||type)}</h4><div class="meta">${esc(type)} · ${esc(niceDate(d.date))}</div><div class="meta">${esc((d.pocketId&&displayPocket(state.pockets.find(p=>p.id===d.pocketId)?.name||d.pocket))||(d.investmentId&&state.investments.find(i=>i.id===d.investmentId)?.name)||d.recipient||d.pocket||displayBank(d.accountName)||d.category||'Registro local')}</div></div></div><div class="amount money ${amountClass}">${sign}${money(d.amount)}</div></div><div class="sync-note">${esc(syncLabel(d))}${d.officialId?' · '+esc(d.officialId):''}</div>
+ <div class="draft-acts">
+ ${(['IMPORTADO','REVISAO','ENVIANDO','ERRO','PROCESSANDO'].includes(d.syncStatus))?'<button type="button" class="btn btn-secondary" disabled>Registro protegido</button>':`<button type="button" class="btn btn-secondary" data-edit="${esc(d.id)}">Editar</button><button type="button" class="btn btn-red" data-del="${esc(d.id)}">Excluir</button>`}
+ 
+ </div></article>`;
  }).join(''):`<div class="card empty"><div class="symbol">◇</div><b>Nenhum registro local ainda</b><p>Toque em Registrar para criar seu primeiro registro.</p><button class="btn btn-secondary" data-route="registrar">Criar registro</button></div>`}
- <p class="secondary-note">Status atual: rascunho local. Nenhum registro foi lançado na planilha ou confirmado pelo banco. Evite cadastrar a mesma operação duas vezes.</p>`;
+ <p class="secondary-note">Registros continuam somente neste aparelho. A conexao D1 v1.7 e exclusivamente para login e consultas; nenhum registro local sera enviado automaticamente.</p>`;
 }
 function snapshot(){const s=state.snapshot||{};
  const fixed=[['mp','Saldo livre Mercado Pago'],['inter','Saldo livre Banco Inter'],['cash','Dinheiro em espécie'],['limiteMp','Limite disponível cartão Mercado Pago'],['limiteInter','Limite disponível Banco Inter'],['faturaMp','Fatura atual Mercado Pago'],['faturaInter','Fatura atual Banco Inter']];
@@ -427,12 +460,23 @@ function snapshot(){const s=state.snapshot||{};
   <div class="section-title">Cartões</div>${fixed.slice(3).map(([id,title])=>field(id,title,getPosition(s,id))).join('')}
   <div class="field"><label>Data da posição</label><input type="date" class="input" name="date" value="${esc(s.date||localISO())}"></div><button class="btn btn-block" type="submit">Guardar posição local</button></form>`)}`;
 }
-function settings(){main.innerHTML=`<div class="page-intro">${label('Seu aplicativo')}<h1 class="heading">Ajustes e privacidade</h1></div>
- ${card(`<div class="kv"><div class="k">Versão</div><div class="v">${VERSION}</div></div><div class="kv"><div class="k">Conexão Google Sheets</div><div class="v">Não configurada</div></div><div class="kv"><div class="k">API da OpenAI</div><div class="v">Desativada / sem custo</div></div><div class="kv"><div class="k">Armazenamento</div><div class="v">Local no navegador</div></div><div class="line"></div><button class="btn btn-block" data-do="install" id="install-action">Instalar na tela inicial</button><p class="installnote">Android / Chrome: ⋮ → <b>Adicionar à tela inicial</b> ou <b>Instalar aplicativo</b>. É necessário abrir por HTTPS ou localhost, não por arquivo ZIP diretamente.</p>`)}
- ${card(`<h3>Taxas de referência (opcional)</h3><p class="small muted">Sem conexão com o Banco Central nesta versão. CDI manual serve somente a uma projeção indicativa, assumindo taxa constante. Após 7 dias o cálculo é suspenso até atualização da referência.</p><form id="reference-form"><div class="field"><label>CDI anual de referência (%)</label><input class="input" inputmode="decimal" name="cdiAnnual" placeholder="Ex.: 14,90" value="${esc(state.referenceRates?.cdiAnnual??'')}"></div><div class="field"><label>Data dessa referência</label><input class="input" type="date" name="cdiUpdatedAt" value="${esc(state.referenceRates?.cdiUpdatedAt||localISO())}"></div><button class="btn btn-secondary" type="submit">Guardar taxa de referência</button></form>`)}
- ${card(`<h3>Controle dos dados locais</h3><p class="small muted">Você controla os dados armazenados neste navegador. Limpar os dados do navegador também os apaga.</p><div class="flex-wrap-row"><button class="btn btn-secondary" data-do="export">Exportar backup completo</button><label class="btn btn-secondary backup-import" for="backup-file">Restaurar backup</label><input type="file" accept="application/json,.json" id="backup-file" class="sr-only"><button class="btn btn-red" data-do="clear">Apagar dados locais</button></div>`)}
- ${card(`<h3>Próxima fase: integração segura</h3><p class="small muted">Estamos preparando autenticação individual, consulta dos saldos oficiais e envio com confirmação e proteção contra duplicidades. Nada está conectado nesta versão; o webhook do WhatsApp continuará separado.</p>`)}
- `}
+function settings(){const pr=profile(),cl=getClientId();
+ main.innerHTML=`<div class="page-intro">${label('Seu aplicativo')}<h1 class="heading">Ajustes e privacidade</h1></div>
+ ${card(`<div class="kv"><div class="k">Versão</div><div class="v">${VERSION}</div></div><div class="kv"><div class="k">API D1 de homologacao</div><div class="v">Somente leitura nesta etapa</div></div><div class="kv"><div class="k">Gravacoes financeiras</div><div class="v">Bloqueadas no Worker</div></div><div class="kv"><div class="k">Registros existentes</div><div class="v">Preservados neste aparelho</div></div><div class="line"></div><button class="btn btn-block" data-do="install" id="install-action">Instalar na tela inicial</button><p class="installnote">Android/Chrome: menu ⋮ → Instalar app. Nao remova a instalacao atual nem limpe o armazenamento.</p>`)}
+ ${card(`<h3>Google + Cloudflare D1 (HML)</h3><p class="small muted">Servidor publico: ${esc(getApiUrl())}. O identificador OAuth Web e publico e fica salvo apenas neste navegador. Nunca coloque aqui Client Secret ou token.</p>
+ <form id="client-id-form"><div class="field"><label for="client-id-input">Client ID OAuth Web do Google</label><input id="client-id-input" name="clientId" class="input" type="text" inputmode="text" autocomplete="off" placeholder="123...apps.googleusercontent.com" value="${esc(cl)}" required></div><button class="btn btn-secondary" type="submit">Salvar Client ID neste aparelho</button></form>
+ <div class="line"></div><p class="small"><b>Identidade:</b> <span id="auth-status">${connected()?esc(email())+' — validada pelo Worker':configured()?'Aguardando login Google.':'Configure o Client ID para continuar.'}</span></p>
+ <div id="google-login-area" class="login-area"></div>
+ <div class="flex-wrap-row mt-14"><button type="button" class="btn btn-secondary" data-do="verify-d1" ${connected()?'':'disabled'}>Verificar acesso</button><button type="button" class="btn btn-secondary" data-do="bootstrap-d1" ${connected()&&!pr?.registered?'':'disabled'}>Preparar meu perfil no D1</button><button type="button" class="btn btn-secondary" data-do="read-d1" ${connected()&&pr?.registered?'':'disabled'}>Consultar D1</button><button type="button" class="btn btn-ghost" data-do="logout">Sair</button></div>
+ <p class="hint">${connected()?(pr?.registered?'Perfil cadastrado no D1.':'Identidade validada. Falta preparar perfil tecnico no D1.'):'Os tokens Google nao sao armazenados no backup nem no navegador; sera necessario novo login quando a pagina recarregar.'}</p>
+ <div id="official-summary" aria-live="polite"></div><p class="hint">Esta versao nao sincroniza nem altera lancamentos financeiros. A criacao de perfil e apenas tecnica.</p>`)}
+ ${card(`<h3>Taxas de referencia (opcional)</h3><p class="small muted">CDI informado manualmente para simulacoes locais. Nao representa saldo bancario.</p><form id="reference-form"><div class="field"><label>CDI anual de referencia (%)</label><input class="input" inputmode="decimal" name="cdiAnnual" placeholder="Ex.: 14,90" value="${esc(state.referenceRates?.cdiAnnual??'')}"></div><div class="field"><label>Data dessa referencia</label><input class="input" type="date" name="cdiUpdatedAt" value="${esc(state.referenceRates?.cdiUpdatedAt||localISO())}"></div><button class="btn btn-secondary" type="submit">Guardar taxa de referencia</button></form>`)}
+ ${card(`<h3>Controle dos dados locais</h3><p class="small muted">Limpar dados do navegador os apaga. Faca backup antes de atualizar.</p><div class="flex-wrap-row"><button class="btn btn-secondary" data-do="export">Exportar backup completo</button><label class="btn btn-secondary backup-import" for="backup-file">Restaurar backup</label><input type="file" accept="application/json,.json" id="backup-file" class="sr-only"><button class="btn btn-red" data-do="clear">Apagar dados locais</button></div>`)}
+ ${card(`<h3>Limites da homologacao</h3><p class="small muted">A API ainda nao registra ou sincroniza operacoes do app. Nao lance movimentacoes reais esperando que sejam transmitidas ao D1. Os dados reais continuam locais ate a migracao segura.</p>`)}
+ `;
+ const googleEl=document.querySelector('#google-login-area');if(googleEl)mountGoogle(googleEl,()=>{notify('Login Google validado pelo servidor.');settings();},msg=>{notify('Falha no login Google.');const x=document.querySelector('#auth-status');if(x)x.textContent='Nao autorizado: '+msg;});
+}
+
 function saveSnapshot(form){
  const original=state.snapshot,values=new FormData(form);
  const s={...(original||{}),pocketBalances:{...(original?.pocketBalances||{})},investmentBalances:{...(original?.investmentBalances||{})}};
@@ -452,7 +496,7 @@ function saveSnapshot(form){
  state.snapshot=s;if(!persist()){state.snapshot=original;return}
  notify('Posição manual atualizada.');navigate('inicio');
 }
-function exportData(){const payload={format:'meu-financeiro-pwa-v1.5',createdAt:new Date().toISOString(),warning:'Dados locais, não publicados no controle oficial. Armazene o backup em local seguro.',drafts:state.drafts,snapshot:state.snapshot,pockets:state.pockets,investments:state.investments,referenceRates:state.referenceRates||{}};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='meu-financeiro-backup-v1.5.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200)}
+function exportData(){const payload={format:'meu-financeiro-pwa-v1.6',createdAt:new Date().toISOString(),warning:'Dados locais, não publicados no controle oficial. Armazene o backup em local seguro.',drafts:state.drafts,snapshot:state.snapshot,pockets:state.pockets,investments:state.investments,referenceRates:state.referenceRates||{}};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='meu-financeiro-backup-v1.6.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200)}
 function clearData(){if(!confirm('Apagar TODOS os rascunhos, saldos e cadastros locais armazenados neste navegador? Isso não afeta a planilha oficial.'))return;state=fresh();persist();notify('Dados locais apagados.');navigate('inicio')}
 document.body.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
  if(b.dataset.operation){activeOperation=b.dataset.operation;entryMode='rapido';navigate('registrar');return}
@@ -462,10 +506,14 @@ document.body.addEventListener('click',e=>{const b=e.target.closest('button');if
  if(b.dataset.sample){const t=document.querySelector('#natural-text');if(t){t.value=b.dataset.sample;showInterpret(t.value)}return}
  if(b.dataset.query){const x=document.querySelector('#query-text');x.value=b.dataset.query;showQuery(x.value);return}
  if(b.dataset.assetAct){actionCatalog(b.dataset.assetKind,b.dataset.assetId,b.dataset.assetAct);return}
+ if(b.dataset.sync){void syncRecord(b.dataset.sync);return}
  if(b.dataset.edit){editingDraftId=b.dataset.edit;navigate('editar-registro');return}
  if(b.dataset.lotDelete){removeLot(b.dataset.lotKind,b.dataset.lotAsset,b.dataset.lotDelete);return}
- if(b.dataset.del){if(!confirm('Excluir somente este rascunho local?'))return;state.drafts=state.drafts.filter(d=>d.id!==b.dataset.del);persist();render();notify('Rascunho removido.');return}
- switch(b.dataset.do){case'export':exportData();return;case'clear':clearData();return;case'snapshot':route='snapshot';snapshot();return;case'install':if(installedPrompt){installedPrompt.prompt();installedPrompt.userChoice.finally(()=>{installedPrompt=null})}else notify('No Chrome Android: menu ⋮ → Instalar app / Adicionar à tela inicial.');return}
+ if(b.dataset.del){const rec=state.drafts.find(d=>d.id===b.dataset.del);if(!rec||rec.syncStatus&&rec.syncStatus!=='LOCAL')return;
+  if(!confirm('Excluir este registro e o aporte-base vinculado, quando existir? Isso não estorna operações no banco.'))return;
+  for(const a of [...state.pockets,...state.investments])a.lots=(a.lots||[]).filter(l=>l.sourceDraftId!==rec.id);
+  state.drafts=state.drafts.filter(d=>d.id!==b.dataset.del);persist();render();notify('Registro local excluído.');return}
+ switch(b.dataset.do){case'read-d1':void readOfficial();return;case'verify-d1':void verifyD1();return;case'bootstrap-d1':void createD1Profile();return;case'official-summary':void readOfficial();return;case'logout':logoff();settings();return;case'export':exportData();return;case'clear':clearData();return;case'snapshot':route='snapshot';snapshot();return;case'install':if(installedPrompt){installedPrompt.prompt();installedPrompt.userChoice.finally(()=>{installedPrompt=null})}else notify('No Chrome Android: menu ⋮ → Instalar app / Adicionar à tela inicial.');return}
 });
 document.body.addEventListener('change',e=>{
  if(e.target.matches('#quick-operation')){
@@ -493,7 +541,7 @@ document.body.addEventListener('input',e=>{
 document.body.addEventListener('focusin',e=>{
  if(e.target.matches('[data-centavos]')){const input=e.target;try{input.setSelectionRange(input.value.length,input.value.length)}catch(_){}}
 });
-document.body.addEventListener('submit',e=>{e.preventDefault();if(e.target.id==='quick-form')saveQuick(e.target);else if(e.target.id==='natural-form')showInterpret(e.target.querySelector('#natural-text').value);else if(e.target.id==='draft-form')handleSaveDraft(e.target);else if(e.target.id==='query-form')showQuery(e.target.querySelector('#query-text').value);else if(e.target.id==='snapshot-form')saveSnapshot(e.target);else if(e.target.id==='new-pocket-form')createCatalog(e.target,'pocket');else if(e.target.id==='new-investment-form')createCatalog(e.target,'investment');else if(e.target.matches('.rename-form'))renameCatalog(e.target);else if(e.target.matches('.lot-form'))saveLot(e.target);else if(e.target.id==='reference-form')saveReference(e.target);else if(e.target.id==='edit-draft-form')saveEditedDraft(e.target)});
+document.body.addEventListener('submit',e=>{e.preventDefault();if(e.target.id==='client-id-form'){try{storeClientId(new FormData(e.target).get('clientId'));notify('Client ID salvo. Recarregando login...');settings()}catch(err){notify('Client ID invalido: '+String(err.message||err))}}else if(e.target.id==='quick-form')saveQuick(e.target);else if(e.target.id==='natural-form')showInterpret(e.target.querySelector('#natural-text').value);else if(e.target.id==='draft-form')handleSaveDraft(e.target);else if(e.target.id==='query-form')showQuery(e.target.querySelector('#query-text').value);else if(e.target.id==='snapshot-form')saveSnapshot(e.target);else if(e.target.id==='new-pocket-form')createCatalog(e.target,'pocket');else if(e.target.id==='new-investment-form')createCatalog(e.target,'investment');else if(e.target.matches('.rename-form'))renameCatalog(e.target);else if(e.target.matches('.lot-form'))saveLot(e.target);else if(e.target.id==='reference-form')saveReference(e.target);else if(e.target.id==='edit-draft-form')saveEditedDraft(e.target)});
 document.body.addEventListener('change',async e=>{if(e.target.id!=='backup-file')return;const file=e.target.files?.[0];if(!file)return;try{if(file.size>5000000)throw new Error('Arquivo grande demais.');const raw=JSON.parse(await file.text());if(!Array.isArray(raw.drafts)||!Array.isArray(raw.pockets)||!Array.isArray(raw.investments)||!('snapshot'in raw))throw new Error('Formato de backup não reconhecido.');if(raw.drafts.length>50000||raw.pockets.length>1000||raw.investments.length>1000)throw new Error('Arquivo excede os limites de segurança.');if(!confirm(`Restaurar backup com ${raw.drafts.length} registro(s), ${raw.pockets.length} cofrinho(s) e ${raw.investments.length} investimento(s)? Isso substituirá todos os dados locais atuais. Exporte um backup antes.`))return;const backup=state;state=migrate({drafts:raw.drafts,pockets:raw.pockets,investments:raw.investments,snapshot:raw.snapshot,referenceRates:raw.referenceRates||{}});if(!persist()){state=backup;return;}notify('Backup restaurado neste aparelho.');navigate('inicio');}catch(err){notify('Não foi possível restaurar: '+(err.message||'arquivo inválido'));}finally{e.target.value='';}});
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installedPrompt=e});
 window.addEventListener('appinstalled',()=>{installedPrompt=null;notify('Aplicativo adicionado à tela inicial!')});

@@ -1,10 +1,10 @@
-/* Meu Financeiro 1.5.1 — precache completo e solicitações com versões consistentes. */
-const CACHE='meu-financeiro-pwa-v1.5.1';
+/* Meu Financeiro 1.7.0 — precache completo e solicitações com versões consistentes. */
+const CACHE='meu-financeiro-pwa-v1.7.0';
 const ROOT=new URL('./',self.location.href);
 const CORE=[
- './','./index.html','./styles.css?v=1.5.1','./bootstrap.js?v=1.5.1','./app.js?v=1.5.1',
- './parser.mjs?v=1.5.1','./operacoes.mjs?v=1.5.1','./catalogo.mjs?v=1.5.1','./rendimentos.mjs?v=1.5.1',
- './manifest.webmanifest'
+ './','./index.html','./styles.css?v=1.7.0','./bootstrap.js?v=1.7.0','./app.js?v=1.7.0',
+ './parser.mjs?v=1.7.0','./operacoes.mjs?v=1.7.0','./catalogo.mjs?v=1.7.0','./rendimentos.mjs?v=1.7.0',
+ './api.mjs?v=1.7.0','./app-config.js?v=1.7.0','./manifest.webmanifest'
 ];
 const OPTIONAL=['./icons/logo-mark.svg','./icons/icon-192.png','./icons/icon-512.png',
  './icons/icon-maskable-192.png','./icons/icon-maskable-512.png','./icons/icon-180.png'];
