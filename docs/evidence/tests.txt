@@ -1,0 +1,38 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> test
+> node --test tests/*.test.mjs
+
+✔ application imports and renders main routes with legacy local data (DOM stub, not browser) (31.309624ms)
+✔ historical transactions do not count twice against confirmed base; estimates excluded (1.697537ms)
+✔ same-day base ambiguity and duplicate IDs block reconciliation approval (0.212441ms)
+✔ explicit same-day inclusion, negative balances and transfers conserve cents (0.150578ms)
+✔ same reference matches across sheets, conflicting amounts require review, no writes (0.346414ms)
+✔ complete versioned module graph cached; navigations and modules work offline without network (9.987913ms)
+✔ missing core prevents installation (1.100293ms)
+✔ unknown module version fails closed instead of mixing app releases (1.459647ms)
+✔ POST requests bypass cache handler (1.528501ms)
+✔ legacy records survive migration and save with IDs, statuses and unknown fields intact (1.654002ms)
+✔ corrupt and unsupported storage never overwritten by empty fallback (0.719398ms)
+✔ quota errors leave previous stored bytes untouched (0.438863ms)
+✔ stale tab cannot overwrite a newer saved record (0.274345ms)
+✔ withdrawal suspends stale lot projection instead of overstating balance (1.237812ms)
+✔ defaults block financial, account and HML writes (143.94681ms)
+✔ real RS256 validation rejects audience, issuer, expiry, email, verification, sub and signature (13.521796ms)
+✔ atomic balanced expense, replay, hash conflict, concurrent retry and response recovery (22.019316ms)
+D1 batch error injected failure
+✔ injected mid-batch failure rolls back idempotency, transaction, postings and audit; retry keeps key (5.37024ms)
+✔ account ownership prevents writes and reads across users (7.907117ms)
+✔ invalid cent amounts, impossible dates and same-account transfer rejected (14.775322ms)
+✔ future investment maturity is valid; fixed tax above 100 is rejected (5.90531ms)
+✔ pocket mutations blocked until ledger and lot accounting share one transaction (4.254012ms)
+✔ disallowed Origin is rejected before a bootstrap mutation (3.04864ms)
+✔ HML scenario yields 4 transactions and balances 3500/2000/1000 with replay (18.641689ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 349.159239

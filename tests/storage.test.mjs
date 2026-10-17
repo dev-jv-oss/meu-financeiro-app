@@ -1,0 +1,11 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {openLocalStore} from '../storage.mjs';
+import {migrate,positionOverview} from '../catalogo.mjs';
+const fresh=()=>migrate({drafts:[],snapshot:null});
+function memory(initial){const map=new Map(initial===null?[]:[['key',initial]]);return {getItem:k=>map.get(k)??null,setItem:(k,v)=>map.set(k,v)}}
+test('legacy records survive migration and save with IDs, statuses and unknown fields intact',()=>{const raw={drafts:[{id:'legacy',amount:10,syncStatus:'ENVIANDO',custom:'keep'}],snapshot:{mp:15},customRoot:'keep'};const storage=memory(JSON.stringify(raw));const s=openLocalStore(storage,'key',migrate,fresh);s.save(s.state);const actual=JSON.parse(storage.getItem('key'));assert.deepEqual(actual.drafts,raw.drafts);assert.equal(actual.customRoot,'keep')});
+test('corrupt and unsupported storage never overwritten by empty fallback',()=>{for(const bytes of ['{broken','null','{"drafts":[null]}','{"drafts":"wrong"}']){const storage=memory(bytes);const s=openLocalStore(storage,'key',migrate,fresh);assert.equal(s.blocked,true);assert.throws(()=>s.save(fresh()));assert.equal(storage.getItem('key'),bytes)}});
+test('quota errors leave previous stored bytes untouched',()=>{const storage=memory('{"drafts":[]}');const s=openLocalStore(storage,'key',migrate,fresh);storage.setItem=()=>{throw Error('quota')};assert.throws(()=>s.save(fresh()),/quota/);assert.equal(storage.getItem('key'),'{"drafts":[]}')});
+test('stale tab cannot overwrite a newer saved record',()=>{const storage=memory(null);const a=openLocalStore(storage,'key',migrate,fresh),b=openLocalStore(storage,'key',migrate,fresh);a.state.drafts.push({id:'a'});a.save(a.state);assert.throws(()=>b.save(b.state),/outra aba/);assert.equal(JSON.parse(storage.getItem('key')).drafts[0].id,'a')});
+test('withdrawal suspends stale lot projection instead of overstating balance',()=>{const s=fresh();s.pockets=[{id:'p',name:'P',lots:[{amount:100,date:'2026-01-01'}],rateType:'none',irEnabled:false,iofEnabled:false}];s.drafts=[{id:'w',pocketId:'p',direction:'resgate',amount:50}];s.snapshot={pocketBalances:{p:50}};const p=positionOverview(s,'2026-01-02').pockets[0];assert.equal(p.balance,50);assert.equal(p.projectionSource,'confirmed')});

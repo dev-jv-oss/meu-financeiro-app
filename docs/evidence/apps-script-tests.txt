@@ -1,0 +1,17 @@
+Testes do módulo de cartões passaram. Nenhuma planilha foi acessada ou alterada.
+PASS finCartTestes
+Todos os 33 testes complementares v10 passaram. Sem acesso a planilhas.
+PASS finTestesInterpretadorV10
+Todos os 7 testes de rota v11 passaram. Nenhum acesso a planilhas.
+PASS finTestesRotaEventoV11
+Todos os 46 testes complementares v12 passaram. Nenhuma planilha acessada.
+PASS finTestesVariacoesCofrinhoV12
+Todos os 32 testes de integração passaram. Nenhuma planilha foi acessada ou alterada.
+PASS finTestesIntegracao
+Todos os 34 testes de automação passaram. Nenhuma planilha foi acessada ou alterada.
+PASS finTestesAutomacao
+Todos os 8 testes de aprovacao de cofrinhos v12 passaram. Nenhuma planilha acessada.
+PASS finTestesAprovacaoCofrinhoV12
+Todos os 35 testes de respostas v14 passaram. Nenhuma planilha ou API acessada.
+PASS finTestesRespostasV14
+Suites: 8; falhas: 0

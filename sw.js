@@ -1,25 +1,26 @@
-/* Meu Financeiro 1.8.0 — precache completo e solicitações com versões consistentes. */
-const CACHE='meu-financeiro-pwa-v1.8.0';
+/* Atomic app shell: no activation over an open older client, no mixed network modules. */
+const CACHE='meu-financeiro-pwa-v1.9.2-audit';
 const ROOT=new URL('./',self.location.href);
-const CORE=[
- './','./index.html','./styles.css?v=1.8.0','./bootstrap.js?v=1.8.0','./app.js?v=1.8.0',
- './parser.mjs?v=1.8.0','./operacoes.mjs?v=1.8.0','./catalogo.mjs?v=1.8.0','./rendimentos.mjs?v=1.8.0',
- './api.mjs?v=1.8.0','./app-config.js?v=1.8.0','./manifest.webmanifest'
-];
-const OPTIONAL=['./icons/logo-mark.svg','./icons/icon-192.png','./icons/icon-512.png',
- './icons/icon-maskable-192.png','./icons/icon-maskable-512.png','./icons/icon-180.png'];
+const CORE=['./','./index.html','./styles.css?v=1.9.2-audit','./bootstrap.js?v=1.9.2-audit','./app.js?v=1.9.2-audit',
+ './parser.mjs?v=1.9.2-audit','./operacoes.mjs?v=1.9.2-audit','./catalogo.mjs?v=1.9.2-audit','./rendimentos.mjs?v=1.9.2-audit',
+ './api.mjs?v=1.9.2-audit','./app-config.js?v=1.9.2-audit','./storage.mjs?v=1.9.2-audit','./manifest.webmanifest','./queue-ui.mjs?v=1.9.2-audit','./outbox.mjs?v=1.9.2-audit','./sync-payload.mjs?v=1.9.2-audit'];
+const OPTIONAL=['./icons/logo-mark.svg','./icons/icon-192.png','./icons/icon-512.png','./icons/icon-maskable-192.png','./icons/icon-maskable-512.png','./icons/icon-180.png'];
 self.addEventListener('install',e=>e.waitUntil((async()=>{
  const cache=await caches.open(CACHE);
- await cache.addAll(CORE); // O app precisa de todos os módulos.
- await Promise.all(OPTIONAL.map(path=>cache.add(path).catch(()=>{}))); // Ícone ausente não bloqueia a atualização.
- await self.skipWaiting();
+ await cache.addAll(CORE);
+ await Promise.all(OPTIONAL.map(path=>cache.add(path).catch(()=>{})));
+ // Browser activates only after the previous controlled clients close.
 })()));
-self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(async keys=>{for(const k of keys)if(k.startsWith('meu-financeiro-pwa-')&&k!==CACHE)await caches.delete(k);await self.clients.claim()})));
+self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch',e=>{
  const r=e.request,u=new URL(r.url);
- if(r.method!=='GET'||u.origin!==self.location.origin||!u.pathname.startsWith(ROOT.pathname))return;
- if(r.mode==='navigate'){
-  e.respondWith(fetch(r).then(response=>{if(response.ok){const clone=response.clone();caches.open(CACHE).then(c=>c.put('./index.html',clone)).catch(()=>{});}return response;}).catch(()=>caches.match('./index.html')));return;
- }
- e.respondWith(fetch(r).then(response=>{if(response.ok){const clone=response.clone();caches.open(CACHE).then(c=>c.put(r,clone)).catch(()=>{});}return response;}).catch(()=>caches.match(r)));
+ if(r.method!=='GET'||u.origin!==ROOT.origin||!u.pathname.startsWith(ROOT.pathname))return;
+ e.respondWith((async()=>{
+  const cache=await caches.open(CACHE);
+  const key=r.mode==='navigate'?new URL('index.html',ROOT).href:r;
+  const hit=await cache.match(key);if(hit)return hit;
+  // Unknown modules must not be fetched from another deployment version.
+  if(/\.(?:m?js|css)$/.test(u.pathname))return new Response('Versão indisponível; feche e reabra o aplicativo.',{status:503});
+  try{return await fetch(r)}catch{return new Response('Conteúdo indisponível offline.',{status:503})}
+ })());
 });

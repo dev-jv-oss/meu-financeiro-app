@@ -1,0 +1,53 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> test
+> node --test tests/*.test.mjs
+
+✔ application imports and renders main routes with legacy local data (DOM stub, not browser) (37.206598ms)
+✔ committed envelope survives reopen and keeps key; source payload and owner cannot change (24.841038ms)
+✔ parallel tabs obtain one lease; expired attempt cannot overwrite newer completion (2.846853ms)
+✔ both explicit write gates must be true; defaults perform no network (1.702708ms)
+✔ lost response resolves original operation without a second financial POST (1.928379ms)
+✔ retry after authoritative not-found reuses exact frozen key and payload (1.909961ms)
+✔ failed lookup never replays a financial POST (2.056992ms)
+✔ owner change during recovery blocks send, preserving original ownership (3.801183ms)
+✔ environment mismatch sends nothing; conflict requires review and does not retry (1.619603ms)
+✔ invalid acknowledgement is uncertain, never completed (1.103815ms)
+✔ storage write failure cannot report a durable prepared operation (1.357388ms)
+✔ draft conversion excludes legacy, cards, lot operations, unknown accounts and fractional cents (0.849491ms)
+✔ queue UI prepares durable snapshot using only GET account lookup and preserves source (30.470629ms)
+✔ queue UI rejects unverified owner without network or data mutation (0.403198ms)
+✔ historical transactions do not count twice against confirmed base; estimates excluded (1.670059ms)
+✔ same-day base ambiguity and duplicate IDs block reconciliation approval (0.200502ms)
+✔ explicit same-day inclusion, negative balances and transfers conserve cents (0.184789ms)
+✔ same reference matches across sheets, conflicting amounts require review, no writes (0.355116ms)
+✔ complete versioned module graph cached; navigations and modules work offline without network (9.726471ms)
+✔ missing core prevents installation (1.405279ms)
+✔ unknown module version fails closed instead of mixing app releases (6.449698ms)
+✔ POST requests bypass cache handler (0.751263ms)
+✔ queue preparation module dependencies are all available offline (1.906205ms)
+✔ legacy records survive migration and save with IDs, statuses and unknown fields intact (1.943762ms)
+✔ corrupt and unsupported storage never overwritten by empty fallback (0.526274ms)
+✔ quota errors leave previous stored bytes untouched (0.461456ms)
+✔ stale tab cannot overwrite a newer saved record (0.263177ms)
+✔ withdrawal suspends stale lot projection instead of overstating balance (0.542058ms)
+✔ defaults block financial, account and HML writes (54.792378ms)
+✔ real RS256 validation rejects audience, issuer, expiry, email, verification, sub and signature (13.524789ms)
+✔ atomic balanced expense, replay, hash conflict, concurrent retry and response recovery (20.775926ms)
+D1 batch error injected failure
+✔ injected mid-batch failure rolls back idempotency, transaction, postings and audit; retry keeps key (4.839008ms)
+✔ account ownership prevents writes and reads across users (6.526695ms)
+✔ invalid cent amounts, impossible dates and same-account transfer rejected (10.802939ms)
+✔ future investment maturity is valid; fixed tax above 100 is rejected (5.034073ms)
+✔ pocket mutations blocked until ledger and lot accounting share one transaction (2.686302ms)
+✔ disallowed Origin is rejected before a bootstrap mutation (2.059156ms)
+✔ HML scenario yields 4 transactions and balances 3500/2000/1000 with replay (14.947746ms)
+✔ verified profile exposes stable owner and balances keep ledger separate from confirmations (5.685646ms)
+ℹ tests 39
+ℹ suites 0
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 263.905135
