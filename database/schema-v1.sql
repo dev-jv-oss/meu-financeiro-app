@@ -1,7 +1,7 @@
 -- Meu Financeiro | D1 / SQLite | Esquema inicial v1 | HOMOLOGACAO
 -- Compatibilidade: Cloudflare D1 (SQLite). Somente CREATE/INDEX/VIEW e marcador de versao.
 -- NAO remove dados, NAO insere movimentacoes, NAO cria usuario real.
--- Aplicar apenas ao banco meu-financeiro-hml.
+-- Aplicar apenas ao banco meu-financeiro-teste-v192.
 -- Dinheiro SEMPRE em centavos INTEGER. Datas civis em YYYY-MM-DD; timestamps em UTC.
 -- A API devera validar usuario, titularidade, saldos, partidas equilibradas e idempotencia.
 
