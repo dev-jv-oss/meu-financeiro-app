@@ -1,5 +1,5 @@
-/* Meu Financeiro 1.7 — Google Identity Services + API D1 HOMOLOGACAO. */
-import {APP_CONFIG} from './app-config.js?v=1.7.0';
+/* Meu Financeiro 1.8 — Google Identity Services + API D1 HOMOLOGACAO. */
+import {APP_CONFIG} from './app-config.js?v=1.8.0';
 let idToken='',verifiedProfile=null,currentClient='',authListener=null,errorListener=null;
 const pattern=/^\d{6,}-[a-z0-9-]+\.apps\.googleusercontent\.com$/i;
 export const getApiUrl=()=>APP_CONFIG.apiBaseUrl;

@@ -1,9 +1,9 @@
-import {configured,connected,email,profile,mountGoogle,apiRequest,bootstrapProfile,logoff,storeClientId,getClientId,getApiUrl} from './api.mjs?v=1.7.0';
-import {interpret,money,norm,round2} from './parser.mjs?v=1.7.0';
-import {makeDraft,TYPES,ACCOUNT_OPTIONS,OTHER_ACCOUNT,POCKETS,EXPENSE_CATS,INCOME_CATS,METHODS,INVESTMENTS,BANKS,BANK_OPTIONS,OTHER_BANK,formatCentavos} from './operacoes.mjs?v=1.7.0';
-import {migrate,active,canon,isValidName,positionOverview,getPosition,pocketBalance,investmentBalance,mayArchive,canDelete,displayPocket,displayBank,YIELD_MODES,validateYield,yieldLabel} from './catalogo.mjs?v=1.7.0';
-import {estimatePosition,positionDisplay,validateConditions,liquidityModes,settlementModes,validISO,daysBetween,defaultTax} from './rendimentos.mjs?v=1.7.0';
-const VERSION='1.7.0-auth-hml';
+import {configured,connected,email,profile,mountGoogle,apiRequest,bootstrapProfile,logoff,storeClientId,getClientId,getApiUrl} from './api.mjs?v=1.8.0';
+import {interpret,money,norm,round2} from './parser.mjs?v=1.8.0';
+import {makeDraft,TYPES,ACCOUNT_OPTIONS,OTHER_ACCOUNT,POCKETS,EXPENSE_CATS,INCOME_CATS,METHODS,INVESTMENTS,BANKS,BANK_OPTIONS,OTHER_BANK,formatCentavos} from './operacoes.mjs?v=1.8.0';
+import {migrate,active,canon,isValidName,positionOverview,getPosition,pocketBalance,investmentBalance,mayArchive,canDelete,displayPocket,displayBank,YIELD_MODES,validateYield,yieldLabel} from './catalogo.mjs?v=1.8.0';
+import {estimatePosition,positionDisplay,validateConditions,liquidityModes,settlementModes,validISO,daysBetween,defaultTax} from './rendimentos.mjs?v=1.8.0';
+const VERSION='1.8.0-accounts-hml';
 const KEY='meu-financeiro-pwa-local-v1';
 const main=document.querySelector('#main');
 const toastEl=document.querySelector('#toast');
@@ -429,6 +429,44 @@ async function readOfficial(){
    ${bad.length?'<p class="notice">Foram identificadas inconsistencias contabeis; nao habilite gravacoes.</p>':''}`;
  }catch(e){target.textContent='Falha na consulta: '+String(e.message||e)}
 }
+const TEST_ACCOUNT_NAME='TESTE HML - Conta ficticia';
+const TEST_ACCOUNT_KEY='meu-financeiro-hml-pending-account-v1';
+function pendingTestAccount(){try{const j=JSON.parse(localStorage.getItem(TEST_ACCOUNT_KEY)||'null');return j&&j.name===TEST_ACCOUNT_NAME&&typeof j.clientOperationId==='string'?j:null}catch{return null}}
+function makeTestAccount(){
+ const old=pendingTestAccount();if(old)return old;
+ if(!crypto?.randomUUID)throw Error('Gerador seguro de identificacao indisponivel.');
+ const newAccount={name:TEST_ACCOUNT_NAME,kind:'bank',institution:'Banco ficticio HML',clientOperationId:'hml-account-'+crypto.randomUUID()};
+ localStorage.setItem(TEST_ACCOUNT_KEY,JSON.stringify(newAccount));return newAccount;
+}
+async function createD1TestAccount(){
+ if(!connected()||!profile()?.registered){notify('Entre com Google e prepare o perfil no D1.');return}
+ if(!profile()?.accountSetup){notify('Cadastro de contas de teste bloqueado. Configure ENABLE_ACCOUNT_SETUP=true no Worker HML.');return}
+ const el=document.querySelector('#account-test-feedback'),btn=document.querySelector('#account-test-create');
+ if(btn)btn.disabled=true;
+ if(el)el.textContent='Consultando D1 antes de criar...';
+ try{
+  const existing=await apiRequest('/api/accounts');
+  if((existing.accounts||[]).some(x=>x.name===TEST_ACCOUNT_NAME)){
+   localStorage.removeItem(TEST_ACCOUNT_KEY);
+   if(el)el.textContent='Conta ficticia ja existe no D1. Nenhuma duplicata criada.';
+   await readOfficial();return;
+  }
+  const request=makeTestAccount();
+  if(!confirm('Criar a conta ficticia "'+TEST_ACCOUNT_NAME+'" no banco D1 de HOMOLOGACAO? Nao sera criada movimentacao nem saldo financeiro.')){
+   if(el)el.textContent='Cadastro cancelado. A chave da tentativa foi preservada.';return;
+  }
+  if(el)el.textContent='Enviando conta ficticia ao D1...';
+  const response=await apiRequest('/api/accounts',{method:'POST',data:request});
+  // Confirmar leitura antes de descartar o identificador: respostas perdidas nao devem gerar duplicidade.
+  const confirmRead=await apiRequest('/api/accounts');
+  if(!(confirmRead.accounts||[]).some(x=>x.id===response.accountId))throw Error('O servidor respondeu, mas a nova conta ainda nao apareceu. Mantenha a mesma chave e consulte novamente.');
+  localStorage.removeItem(TEST_ACCOUNT_KEY);
+  if(el)el.textContent=response.replayed?'A conta ficticia ja havia sido gravada; resposta recuperada sem duplicacao.':'Conta ficticia gravada e confirmada no D1!';
+  await readOfficial();
+ }catch(e){
+  if(el)el.textContent='Nao foi possivel confirmar o resultado: '+String(e.message||e)+'. Nao crie outra conta manualmente; esta tentativa manteve sua chave.';
+ }finally{if(btn)btn.disabled=false;}
+}
 async function verifyD1(){try{const r=await apiRequest('/api/me');notify(r.authenticated?'Identidade confirmada pelo D1.':'O servidor nao confirmou a identidade.');settings()}catch(e){notify('Falha na verificacao: '+String(e.message||e));settings()}}
 async function createD1Profile(){if(!confirm('Criar seu perfil tecnico no banco D1 de HOMOLOGACAO? Isso nao importa registros nem habilita movimentacoes.'))return;try{await bootstrapProfile();notify('Perfil criado/confirmado no D1.');settings()}catch(e){notify('Falha ao preparar perfil: '+String(e.message||e))}}
 function drafts(){
@@ -462,17 +500,22 @@ function snapshot(){const s=state.snapshot||{};
 }
 function settings(){const pr=profile(),cl=getClientId();
  main.innerHTML=`<div class="page-intro">${label('Seu aplicativo')}<h1 class="heading">Ajustes e privacidade</h1></div>
- ${card(`<div class="kv"><div class="k">Versão</div><div class="v">${VERSION}</div></div><div class="kv"><div class="k">API D1 de homologacao</div><div class="v">Somente leitura nesta etapa</div></div><div class="kv"><div class="k">Gravacoes financeiras</div><div class="v">Bloqueadas no Worker</div></div><div class="kv"><div class="k">Registros existentes</div><div class="v">Preservados neste aparelho</div></div><div class="line"></div><button class="btn btn-block" data-do="install" id="install-action">Instalar na tela inicial</button><p class="installnote">Android/Chrome: menu ⋮ → Instalar app. Nao remova a instalacao atual nem limpe o armazenamento.</p>`)}
+ ${card(`<div class="kv"><div class="k">Versão</div><div class="v">${VERSION}</div></div><div class="kv"><div class="k">API D1 de homologacao</div><div class="v">Consultas e cadastro de conta ficticia</div></div><div class="kv"><div class="k">Gravacoes financeiras</div><div class="v">Bloqueadas no Worker</div></div><div class="kv"><div class="k">Registros existentes</div><div class="v">Preservados neste aparelho</div></div><div class="line"></div><button class="btn btn-block" data-do="install" id="install-action">Instalar na tela inicial</button><p class="installnote">Android/Chrome: menu ⋮ → Instalar app. Nao remova a instalacao atual nem limpe o armazenamento.</p>`)}
  ${card(`<h3>Google + Cloudflare D1 (HML)</h3><p class="small muted">Servidor publico: ${esc(getApiUrl())}. O identificador OAuth Web e publico e fica salvo apenas neste navegador. Nunca coloque aqui Client Secret ou token.</p>
  <form id="client-id-form"><div class="field"><label for="client-id-input">Client ID OAuth Web do Google</label><input id="client-id-input" name="clientId" class="input" type="text" inputmode="text" autocomplete="off" placeholder="123...apps.googleusercontent.com" value="${esc(cl)}" required></div><button class="btn btn-secondary" type="submit">Salvar Client ID neste aparelho</button></form>
  <div class="line"></div><p class="small"><b>Identidade:</b> <span id="auth-status">${connected()?esc(email())+' — validada pelo Worker':configured()?'Aguardando login Google.':'Configure o Client ID para continuar.'}</span></p>
  <div id="google-login-area" class="login-area"></div>
  <div class="flex-wrap-row mt-14"><button type="button" class="btn btn-secondary" data-do="verify-d1" ${connected()?'':'disabled'}>Verificar acesso</button><button type="button" class="btn btn-secondary" data-do="bootstrap-d1" ${connected()&&!pr?.registered?'':'disabled'}>Preparar meu perfil no D1</button><button type="button" class="btn btn-secondary" data-do="read-d1" ${connected()&&pr?.registered?'':'disabled'}>Consultar D1</button><button type="button" class="btn btn-ghost" data-do="logout">Sair</button></div>
  <p class="hint">${connected()?(pr?.registered?'Perfil cadastrado no D1.':'Identidade validada. Falta preparar perfil tecnico no D1.'):'Os tokens Google nao sao armazenados no backup nem no navegador; sera necessario novo login quando a pagina recarregar.'}</p>
- <div id="official-summary" aria-live="polite"></div><p class="hint">Esta versao nao sincroniza nem altera lancamentos financeiros. A criacao de perfil e apenas tecnica.</p>`)}
+ <div id="official-summary" aria-live="polite"></div><p class="hint">Esta versao nao sincroniza lancamentos financeiros. Apenas o cadastro da conta ficticia e permitido quando liberado no Worker.</p>`)}
+ ${card(`<h3>Primeira gravacao no D1 · Conta ficticia</h3>
+ <p class="small muted">Teste isolado de homologacao. Cria somente o cadastro de uma conta ficticia, sem lancar receitas, despesas, saldos ou alterar seus registros locais.</p>
+ <p class="small"><b>Nome:</b> TESTE HML - Conta ficticia<br><b>Tipo:</b> conta bancaria de teste</p>
+ <button type="button" id="account-test-create" class="btn btn-secondary" data-do="create-test-account" ${connected()&&pr?.registered&&pr?.accountSetup?'':'disabled'}>Criar / conferir conta ficticia no D1</button>
+ <p id="account-test-feedback" class="hint" role="status">${!connected()?'Entre com Google para testar.':!pr?.registered?'Prepare o perfil no D1.':!pr?.accountSetup?'Ative apenas ENABLE_ACCOUNT_SETUP=true no Worker HML; mantenha ENABLE_FINANCIAL_WRITES=false.':'Cadastro ficticio liberado. Nenhuma transacao financeira sera registrada.'}</p>`)}
  ${card(`<h3>Taxas de referencia (opcional)</h3><p class="small muted">CDI informado manualmente para simulacoes locais. Nao representa saldo bancario.</p><form id="reference-form"><div class="field"><label>CDI anual de referencia (%)</label><input class="input" inputmode="decimal" name="cdiAnnual" placeholder="Ex.: 14,90" value="${esc(state.referenceRates?.cdiAnnual??'')}"></div><div class="field"><label>Data dessa referencia</label><input class="input" type="date" name="cdiUpdatedAt" value="${esc(state.referenceRates?.cdiUpdatedAt||localISO())}"></div><button class="btn btn-secondary" type="submit">Guardar taxa de referencia</button></form>`)}
  ${card(`<h3>Controle dos dados locais</h3><p class="small muted">Limpar dados do navegador os apaga. Faca backup antes de atualizar.</p><div class="flex-wrap-row"><button class="btn btn-secondary" data-do="export">Exportar backup completo</button><label class="btn btn-secondary backup-import" for="backup-file">Restaurar backup</label><input type="file" accept="application/json,.json" id="backup-file" class="sr-only"><button class="btn btn-red" data-do="clear">Apagar dados locais</button></div>`)}
- ${card(`<h3>Limites da homologacao</h3><p class="small muted">A API ainda nao registra ou sincroniza operacoes do app. Nao lance movimentacoes reais esperando que sejam transmitidas ao D1. Os dados reais continuam locais ate a migracao segura.</p>`)}
+ ${card(`<h3>Limites da homologacao</h3><p class="small muted">A API ainda nao registra ou sincroniza operacoes financeiras do app. Nao lance movimentacoes reais esperando que sejam transmitidas ao D1. Os dados reais continuam locais ate a migracao segura.</p>`)}
  `;
  const googleEl=document.querySelector('#google-login-area');if(googleEl)mountGoogle(googleEl,()=>{notify('Login Google validado pelo servidor.');settings();},msg=>{notify('Falha no login Google.');const x=document.querySelector('#auth-status');if(x)x.textContent='Nao autorizado: '+msg;});
 }
@@ -513,7 +556,7 @@ document.body.addEventListener('click',e=>{const b=e.target.closest('button');if
   if(!confirm('Excluir este registro e o aporte-base vinculado, quando existir? Isso não estorna operações no banco.'))return;
   for(const a of [...state.pockets,...state.investments])a.lots=(a.lots||[]).filter(l=>l.sourceDraftId!==rec.id);
   state.drafts=state.drafts.filter(d=>d.id!==b.dataset.del);persist();render();notify('Registro local excluído.');return}
- switch(b.dataset.do){case'read-d1':void readOfficial();return;case'verify-d1':void verifyD1();return;case'bootstrap-d1':void createD1Profile();return;case'official-summary':void readOfficial();return;case'logout':logoff();settings();return;case'export':exportData();return;case'clear':clearData();return;case'snapshot':route='snapshot';snapshot();return;case'install':if(installedPrompt){installedPrompt.prompt();installedPrompt.userChoice.finally(()=>{installedPrompt=null})}else notify('No Chrome Android: menu ⋮ → Instalar app / Adicionar à tela inicial.');return}
+ switch(b.dataset.do){case'create-test-account':void createD1TestAccount();return;case'read-d1':void readOfficial();return;case'verify-d1':void verifyD1();return;case'bootstrap-d1':void createD1Profile();return;case'official-summary':void readOfficial();return;case'logout':logoff();settings();return;case'export':exportData();return;case'clear':clearData();return;case'snapshot':route='snapshot';snapshot();return;case'install':if(installedPrompt){installedPrompt.prompt();installedPrompt.userChoice.finally(()=>{installedPrompt=null})}else notify('No Chrome Android: menu ⋮ → Instalar app / Adicionar à tela inicial.');return}
 });
 document.body.addEventListener('change',e=>{
  if(e.target.matches('#quick-operation')){
