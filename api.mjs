@@ -1,5 +1,5 @@
-/* Meu Financeiro 1.8 — Google Identity Services + API D1 HOMOLOGACAO. */
-import {APP_CONFIG} from './app-config.js?v=1.8.0';
+/* Meu Financeiro 1.9 — Google Identity Services + API D1 HOMOLOGAÇÃO. */
+import {APP_CONFIG} from './app-config.js?v=1.9.1-audit';
 let idToken='',verifiedProfile=null,currentClient='',authListener=null,errorListener=null;
 const pattern=/^\d{6,}-[a-z0-9-]+\.apps\.googleusercontent\.com$/i;
 export const getApiUrl=()=>APP_CONFIG.apiBaseUrl;
@@ -16,27 +16,28 @@ export function storeClientId(id){
  return candidate;
 }
 function errDescription(r,body){
- const map={AUTH_NOT_CONFIGURED:'Confirme GOOGLE_CLIENT_ID e GOOGLE_ALLOWED_EMAIL no Worker.',IDENTITY_NOT_ALLOWED:'Conta Google nao autorizada. Confira o e-mail permitido e o Client ID nas variaveis do Worker.',INVALID_TOKEN:'Token Google invalido. Faca login novamente.',UNKNOWN_SIGNING_KEY:'Nao foi possivel validar a assinatura do Google agora.',SETUP_REQUIRED:'Seu perfil ainda nao existe no D1. Use o botao Preparar perfil.',WRITES_DISABLED:'Gravacoes financeiras desativadas em homologacao.'};
+ const map={AUTH_NOT_CONFIGURED:'Confirme GOOGLE_CLIENT_ID e GOOGLE_ALLOWED_EMAIL no Worker.',IDENTITY_NOT_ALLOWED:'Conta Google não autorizada. Confira o e-mail permitido e o Client ID nas variáveis do Worker.',INVALID_TOKEN:'Token Google inválido. Faça login novamente.',UNKNOWN_SIGNING_KEY:'Não foi possível validar a assinatura do Google agora.',SETUP_REQUIRED:'Seu perfil ainda não existe no D1. Use o botão Preparar perfil.',WRITES_DISABLED:'Gravações financeiras desativadas em homologação.'};
  return map[body?.error]||String(body?.message||body?.error||`Falha HTTP ${r.status}`).slice(0,250);
 }
 export async function apiRequest(route,{method='GET',data}={}){
  if(!idToken)throw Error('Primeiro entre com sua conta Google.');
- if(!/^\/api\/[a-z-]+$/.test(route))throw Error('Rota nao permitida no aplicativo.');
+ if(!/^\/api\/(?:[a-z-]+|hml\/[a-z-]+)$/.test(route))throw Error('Rota não permitida no aplicativo.');
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),18000);
  try{
-  const options={method,headers:{Authorization:'Bearer '+idToken},cache:'no-store',signal:controller.signal};
+  const options={method,headers:{Authorization:'Bearer '+idToken},cache:'no-store',redirect:'error',signal:controller.signal};
   if(method==='POST'){options.headers['Content-Type']='application/json';options.body=JSON.stringify(data||{});}
   const response=await fetch(getApiUrl()+route,options);
-  const result=await response.json().catch(()=>({error:'INVALID_RESPONSE',message:'Resposta nao e JSON.'}));
+  let result;try{result=await response.json()}catch{throw Error('Resposta inválida do servidor. Consulte o resultado antes de repetir a operação.')}
+  if(!result||typeof result!=='object'||Array.isArray(result))throw Error('Resposta inválida do servidor.');
   if(!response.ok){if(response.status===401)logoff();throw Error(errDescription(response,result));}
   return result;
- }catch(e){if(e?.name==='AbortError')throw Error('Tempo de resposta esgotado; confira sua conexao.');throw e}
+ }catch(e){if(e?.name==='AbortError')throw Error('Tempo de resposta esgotado; consulte o resultado antes de repetir; não crie outra operação.');throw e}
  finally{clearTimeout(timer)}
 }
 export async function refreshIdentity(){
  if(!idToken)throw Error('Sem credencial. Entre novamente.');
  const r=await apiRequest('/api/me');
- if(r.authenticated!==true)throw Error('O servidor nao confirmou sua identidade.');
+ if(r.authenticated!==true)throw Error('O servidor não confirmou sua identidade.');
  verifiedProfile=r;return r;
 }
 export async function bootstrapProfile(){if(!connected())throw Error('Entre primeiro.');const r=await apiRequest('/api/bootstrap',{method:'POST',data:{}});await refreshIdentity();return r;}
@@ -44,10 +45,10 @@ export function mountGoogle(el,onLogin,onError){
  authListener=onLogin;errorListener=onError;
  if(!configured()){el.textContent='Informe e salve seu Client ID OAuth Web para habilitar o login.';return;}
  if(connected()){el.textContent='Identidade validada pelo servidor D1.';return;}
- const cid=getClientId();el.textContent='Carregando botao Google...';
+ const cid=getClientId();el.textContent='Carregando botão Google...';
  const render=(tries=0)=>{
   if(!el.isConnected)return;
-  if(!globalThis.google?.accounts?.id){if(tries>=45){el.textContent='Nao foi possivel carregar o login Google. Confira internet, bloqueadores e configuracao do navegador.';return;}setTimeout(()=>render(tries+1),300);return}
+  if(!globalThis.google?.accounts?.id){if(tries>=45){el.textContent='Não foi possível carregar o login Google. Confira a internet, possíveis bloqueadores e as configurações do navegador.';return;}setTimeout(()=>render(tries+1),300);return}
   if(cid!==currentClient){
    globalThis.google.accounts.id.initialize({client_id:cid,auto_select:false,ux_mode:'popup',callback:async response=>{
     if(typeof response?.credential!=='string'||response.credential.length<100)return;
@@ -57,7 +58,7 @@ export function mountGoogle(el,onLogin,onError){
    currentClient=cid;
   }
   el.innerHTML='';
-  try{globalThis.google.accounts.id.renderButton(el,{theme:'outline',size:'large',text:'signin_with',shape:'pill',locale:'pt-BR'});}catch(e){el.textContent='O botao Google nao foi carregado: '+String(e?.message||e)}
+  try{globalThis.google.accounts.id.renderButton(el,{theme:'outline',size:'large',text:'signin_with',shape:'pill',locale:'pt-BR'});}catch(e){el.textContent='O botão Google não foi carregado: '+String(e?.message||e)}
  };
  render();
 }

@@ -1,0 +1,7 @@
+{
+ "name":"meu-financeiro-audit-local",
+ "main":"worker.js",
+ "compatibility_date":"2026-10-17",
+ "vars":{"ENABLE_FINANCIAL_WRITES":"false","ENABLE_ACCOUNT_SETUP":"false","ENABLE_HML_TESTS":"false","ALLOWED_ORIGIN":"http://localhost:8080"},
+ "d1_databases":[{"binding":"DB","database_name":"audit-local","database_id":"CONFIGURE_ONLY_AFTER_APPROVAL"}]
+}

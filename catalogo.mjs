@@ -1,4 +1,4 @@
-import {positionDisplay} from './rendimentos.mjs?v=1.8.0';
+import {positionDisplay} from './rendimentos.mjs?v=1.9.1-audit';
 /** Patrimônio local. Compatível com o armazenamento da v1.0/v1.2.
  * Saldo não é inferido de rascunhos: apenas posição manual confirmada pelo usuário. */
 export const DEFAULT_POCKETS = [
@@ -50,7 +50,7 @@ export function positionOverview(state,today){
  const s=state.snapshot;
  const mp=getPosition(s,'mp'),inter=getPosition(s,'inter'),cash=getPosition(s,'cash');
  const banks=sumKnown([mp,inter]);
- const valuation=(p,manual)=>{const v=today?positionDisplay(p,manual,today,state.referenceRates||{}):{value:manual,source:'confirmed'};if(v.value==null&&p.lots?.length){const principal=Math.round(p.lots.reduce((n,l)=>n+Number(l.amount||0),0)*100)/100;return {...v,value:principal,source:'principal',projectionError:'Capital registrado; rendimento ainda não calculável.'};}return v};
+ const valuation=(p,manual)=>localPosition(state,p,manual,today);
  const pockets=active(state.pockets).map(p=>{const v=valuation(p,pocketBalance(state,p));return {...p,balance:v.value,projectionSource:v.source,projection:v};});
  const investments=active(state.investments).map(p=>{const v=valuation(p,investmentBalance(state,p));return {...p,balance:v.value,projectionSource:v.source,projection:v};});
  const reserved=sumKnown([...pockets.map(p=>p.balance),...investments.map(a=>a.balance)]);
@@ -74,4 +74,11 @@ export function canDelete(state,kind,id){
  const balance=kind==='pocket'?pocketBalance(state,item):investmentBalance(state,item);
  if(balance!=null&&balance!==0)return {ok:false,error:'Não é possível excluir um cadastro com saldo diferente de zero.'};
  return {ok:true};
+}
+
+export function localPosition(state,item,manual,today){
+ if(state.drafts.some(d=>d.direction==='resgate'&&(d.pocketId===item.id||d.investmentId===item.id)))return {value:manual,source:manual==null?'missing':'confirmed',confirmed:manual,projectionError:'Há resgate pendente de conciliação dos lotes. Projeção suspensa.'};
+ const v=today?positionDisplay(item,manual,today,state.referenceRates||{}):{value:manual,source:'confirmed'};
+ if(v.value==null&&item.lots?.length){const principal=Math.round(item.lots.reduce((n,l)=>n+Number(l.amount||0),0)*100)/100;return {...v,value:principal,source:'principal',projectionError:'Capital registrado; rendimento ainda não calculável.'};}
+ return v;
 }

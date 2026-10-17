@@ -1,0 +1,89 @@
+✔ defaults block financial, account and HML writes (27.414542ms)
+✔ real RS256 validation rejects audience, issuer, expiry, email, verification, sub and signature (12.884283ms)
+✖ atomic balanced expense, replay, hash conflict, concurrent retry and response recovery (8.596939ms)
+D1 batch error injected failure
+✔ injected mid-batch failure rolls back idempotency, transaction, postings and audit; retry keeps key (5.482289ms)
+✔ account ownership prevents writes and reads across users (7.224284ms)
+✔ invalid cent amounts, impossible dates and same-account transfer rejected (9.347465ms)
+✖ future investment maturity is valid; fixed tax above 100 is rejected (3.974209ms)
+✖ pocket mutations blocked until ledger and lot accounting share one transaction (4.076704ms)
+✖ disallowed Origin is rejected before a bootstrap mutation (3.051534ms)
+✔ HML scenario yields 4 transactions and balances 3500/2000/1000 with replay (14.998679ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 6
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 178.585594
+
+✖ failing tests:
+
+test at tests/worker.test.mjs:36:1
+✖ atomic balanced expense, replay, hash conflict, concurrent retry and response recovery (8.596939ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  404 !== 200
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/90b9b9c344b2/repo/tests/worker.test.mjs:44:142)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 404,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/worker.test.mjs:67:1
+✖ future investment maturity is valid; fixed tax above 100 is rejected (3.974209ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  400 !== 201
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/90b9b9c344b2/repo/tests/worker.test.mjs:71:9)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 400,
+    expected: 201,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/worker.test.mjs:73:1
+✖ pocket mutations blocked until ledger and lot accounting share one transaction (4.076704ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  201 !== 400
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/90b9b9c344b2/repo/tests/worker.test.mjs:73:179)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 201,
+    expected: 400,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/worker.test.mjs:74:1
+✖ disallowed Origin is rejected before a bootstrap mutation (3.051534ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  201 !== 403
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/90b9b9c344b2/repo/tests/worker.test.mjs:74:107)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 201,
+    expected: 403,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

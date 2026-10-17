@@ -1,9 +1,10 @@
-import {configured,connected,email,profile,mountGoogle,apiRequest,bootstrapProfile,logoff,storeClientId,getClientId,getApiUrl} from './api.mjs?v=1.8.0';
-import {interpret,money,norm,round2} from './parser.mjs?v=1.8.0';
-import {makeDraft,TYPES,ACCOUNT_OPTIONS,OTHER_ACCOUNT,POCKETS,EXPENSE_CATS,INCOME_CATS,METHODS,INVESTMENTS,BANKS,BANK_OPTIONS,OTHER_BANK,formatCentavos} from './operacoes.mjs?v=1.8.0';
-import {migrate,active,canon,isValidName,positionOverview,getPosition,pocketBalance,investmentBalance,mayArchive,canDelete,displayPocket,displayBank,YIELD_MODES,validateYield,yieldLabel} from './catalogo.mjs?v=1.8.0';
-import {estimatePosition,positionDisplay,validateConditions,liquidityModes,settlementModes,validISO,daysBetween,defaultTax} from './rendimentos.mjs?v=1.8.0';
-const VERSION='1.8.0-accounts-hml';
+import {openLocalStore} from './storage.mjs?v=1.9.1-audit';
+import {configured,connected,email,profile,mountGoogle,apiRequest,bootstrapProfile,logoff,storeClientId,getClientId,getApiUrl} from './api.mjs?v=1.9.1-audit';
+import {interpret,money,norm,round2} from './parser.mjs?v=1.9.1-audit';
+import {makeDraft,TYPES,ACCOUNT_OPTIONS,OTHER_ACCOUNT,POCKETS,EXPENSE_CATS,INCOME_CATS,METHODS,INVESTMENTS,BANKS,BANK_OPTIONS,OTHER_BANK,formatCentavos} from './operacoes.mjs?v=1.9.1-audit';
+import {localPosition,migrate,active,canon,isValidName,positionOverview,getPosition,pocketBalance,investmentBalance,mayArchive,canDelete,displayPocket,displayBank,YIELD_MODES,validateYield,yieldLabel} from './catalogo.mjs?v=1.9.1-audit';
+import {estimatePosition,positionDisplay,validateConditions,liquidityModes,settlementModes,validISO,daysBetween,defaultTax} from './rendimentos.mjs?v=1.9.1-audit';
+const VERSION='1.9.1-audit-transactions-hml';
 const KEY='meu-financeiro-pwa-local-v1';
 const main=document.querySelector('#main');
 const toastEl=document.querySelector('#toast');
@@ -11,17 +12,17 @@ const esc=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':
 const maybeMoney=v=>v==null?'—':money(v);
 const num=v=>{let s=String(v??'').trim();if(!s)return null;s=s.replace(/R\$|\s/g,'');if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');else s=s.replace(',','.');const n=Number(s);return Number.isFinite(n)&&n>=0?round2(n):null};
 const fresh=()=>migrate({drafts:[],snapshot:null});
-function load(){try{let s=migrate(JSON.parse(localStorage.getItem(KEY)||'null'));for(const d of s.drafts)if(d.syncStatus==='ENVIANDO')d.syncStatus='ERRO';return s}catch(_){return fresh()}}
-let state=load(),editingDraftId=null,route='inicio',pending=null,installedPrompt=null,activeOperation='despesa',entryMode='rapido';
-function persist(){try{localStorage.setItem(KEY,JSON.stringify(state));return true}catch(_){notify('Não foi possível salvar. Verifique o armazenamento do navegador.');return false}}
+const localStore=openLocalStore(localStorage,KEY,migrate,fresh);
+let state=localStore.state,editingDraftId=null,route='inicio',pending=null,installedPrompt=null,activeOperation='despesa',entryMode='rapido';
+function persist(){try{localStore.save(state);return true}catch(e){notify(e.message||'Não foi possível salvar. Verifique o armazenamento do navegador.');return false}}
 function notify(t){toastEl.textContent=t;toastEl.classList.add('show');clearTimeout(notify._id);notify._id=setTimeout(()=>toastEl.classList.remove('show'),4000)}
 function navigate(r){route=r;pending=null;document.querySelectorAll('[data-route]').forEach(x=>x.classList.toggle('selected',x.dataset.route===r));render();window.scrollTo({top:0,behavior:'instant'})}
 const card=(html)=>`<div class="card">${html}</div>`;
 const label=(s)=>`<span class="eyebrow">${s}</span>`;
-const alert=`<div class="quiet-notice"><span class="lock" aria-hidden="true">◇</span><div><b>Controle de origem:</b> a sincronização com a planilha é mostrada em cada registro. Saldos locais não são saldos bancários online.</div></div>`;
+const alert=(localStore.blocked?'<div class="notice"><b>Dados locais protegidos.</b> A leitura falhou. Gravações bloqueadas para evitar perda de dados. Não limpe os dados do site; exporte uma cópia para recuperação.</div>':'')+`<div class="quiet-notice"><span class="lock" aria-hidden="true">◇</span><div><b>Homologação:</b> registros anteriores continuam locais. Os testes fictícios do D1 não são integrados ao seu patrimônio real.</div></div>`;
 const pictos={despesa:'<path d="M6 18 18 6M8 6h10v10"/>',receita:'<path d="M6 6 18 18M18 8v10H8"/>',cofrinho:'<path d="M5 8h14v10H5zM9 12h6M9 5h6"/>',transferencia:'<path d="M4 8h16m-5-4 5 4-5 4M20 16H4m5-4-5 4 5 4"/>',aplicacao:'<path d="M4 20V12h4v8m4 0V8h4v12m4 0V4h2v16M3 20h20"/>',recarga:'<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',consultar:'<circle cx="12" cy="12" r="9"/><path d="M15 9c-.7-1-1.6-1.5-3-1.5-1.8 0-3 1-3 2.5 0 3.4 6 1.5 6 5 0 1.5-1.3 2.5-3 2.5-1.5 0-2.5-.6-3.3-1.7M12 5v14"/>'};
 const iconSVG=(key)=>`<svg viewBox="0 0 24 24" aria-hidden="true">${pictos[key]||pictos.consultar}</svg>`;
-const localISO=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+const localISO=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Porto_Velho',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 function render(){const badge=document.querySelector('#net-status');if(badge){badge.innerHTML=connected()?'<span class="dot"></span> Conectado':'<span class="dot"></span> Local';}switch(route){case'inicio':return home();case'registrar':return register();case'consultar':return consult();case'rascunhos':return drafts();case'ajustes':return settings();case'patrimonio':return patrimonio();case'editar-registro':return editDraft();default:home()}}
 function balanceText(x){return x?.total==null?'—':money(x.total)}
 function balanceStatus(x){return x?.total==null?'Sem valores informados':x.partial?'Total parcial · dados manuais':'Valores informados manualmente'}
@@ -46,7 +47,7 @@ function home(){const sp=state.snapshot,overview=positionOverview(state,localISO
  <div class="quickgrid">${items.map(([id,title,subtitle,style])=>`<button type="button" class="quick ${style}" ${id==='consultar'?'data-route="consultar"':`data-operation="${id}"`}><span class="qicon">${iconSVG(id)}</span><strong>${title}</strong><span class="subtitle">${subtitle}</span></button>`).join('')}</div>
  <div class="section-title">Visão rápida <small>Somente no aparelho</small></div>
  <div class="stats"><div class="stat"><div class="caption">Registros locais</div><div class="metric">${draftCount}</div><button class="mini-link" type="button" data-route="rascunhos">Ver registros →</button></div><div class="stat"><div class="caption">Sincronização oficial</div><div class="metric metric-sm">Desconectado</div><div class="caption">Saldo e cadastros são locais</div></div></div>
- <p class="secondary-note">Os totais combinam posições manuais e projeções calculáveis; estimativas não são extratos bancários e rascunhos não atualizam saldos. Informe nos bancos somente os saldos livres, sem incluir valores já contabilizados nos cofrinhos e investimentos. Dinheiro em espécie, se informado, participa do total geral.</p>`;
+ <p class="secondary-note">Os totais combinam posições manuais e projeções calculáveis; estimativas não são extratos bancários e registros locais não atualizam os saldos bancários. Informe nos bancos somente os saldos livres, sem incluir valores já contabilizados nos cofrinhos e investimentos. Dinheiro em espécie, se informado, participa do total geral.</p>`;
 }
 const opLabels={despesa:'Despesa',receita:'Receita',cofrinho:'Cofrinho',transferencia:'Entre contas',aplicacao:'Investimento',recarga:'Despesa · recarga'};
 function register(){
@@ -198,7 +199,7 @@ function saveQuick(form){
  const r=makeDraft(data,localISO(),{pockets:state.pockets.filter(p=>p.status==='active').map(p=>p.name).concat(created?[created.name]:[])});
  const feedback=document.querySelector('#quick-feedback');
  if(!r.ok){if(feedback)feedback.innerHTML=`<div class="notice">${esc(r.error)}</div>`;notify(r.error);return;}
- const d={...r.draft};d.id=newId('draft');d.createdAt=new Date().toISOString();d.state='EFETIVO LOCAL';d.syncStatus='LOCAL';d.source='app-v1.7-form';
+ const d={...r.draft};d.id=newId('draft');d.createdAt=new Date().toISOString();d.state='EFETIVO LOCAL';d.syncStatus='LOCAL';d.source='app-v1.9.1-audit-form';
  const previous={...state,drafts:[...state.drafts],pockets:[...state.pockets],investments:[...state.investments]};
  if(created)state.pockets.push(created);
  if(data.operation==='aplicacao'&&data.investment==='__new__')state.investments.push(investment);
@@ -252,7 +253,7 @@ function showQuery(text){const p=interpret(text),target=document.querySelector('
  let val=null,labelText='',extra='';
  if(p.kind==='saldo'){
   if(p.pocket){const needle=canon(p.pocket),found=state.pockets.find(x=>canon(x.name).includes(needle)||needle.includes(canon(x.name).replace(/^cofrinho /,'')));
-   if(found){const projected=positionDisplay(found,pocketBalance(state,found),localISO(),state.referenceRates||{});val=projected.value;labelText=found.name;extra=projected.source==='estimated'?'Valor líquido estimado, não saldo bancário confirmado.':'Última posição manual; não há projeção calculável.';}else extra='Cofrinho não reconhecido nesta posição local.';
+   if(found){const projected=localPosition(state,found,pocketBalance(state,found),localISO());val=projected.value;labelText=found.name;extra=projected.source==='estimated'?'Valor líquido estimado, não saldo bancário confirmado.':'Última posição manual; não há projeção calculável.';}else extra='Cofrinho não reconhecido nesta posição local.';
   }else if(p.account==='Mercado Pago — saldo'){val=getPosition(s,'mp');labelText='Mercado Pago';}
   else if(p.account==='Inter'){val=getPosition(s,'inter');labelText='Banco Inter';}
   else extra='Indique uma conta ou cofrinho específico.';
@@ -264,7 +265,7 @@ function niceDate(iso){if(!/^\d{4}-\d{2}-\d{2}$/.test(String(iso||'')))return St
 function patrimonio(){
  const o=positionOverview(state,localISO());
  const manager=(items,kind)=>items.map(item=>{
-  const confirmed=kind==='pocket'?pocketBalance(state,item):investmentBalance(state,item);const projection=positionDisplay(item,confirmed,localISO(),state.referenceRates||{});const bal=projection.value??((item.lots||[]).length?Math.round(item.lots.reduce((a,l)=>a+Number(l.amount||0),0)*100)/100:null);
+  const confirmed=kind==='pocket'?pocketBalance(state,item):investmentBalance(state,item);const projection=localPosition(state,item,confirmed,localISO());const bal=projection.value;
   const count=state.drafts.filter(d=>kind==='pocket'?(d.pocketId===item.id||(!d.pocketId&&canon(d.pocket)===canon(item.name))):d.investmentId===item.id).length;
   const heading=kind==='investment'?`${item.type} · ${displayBank(item.bank)}`:'Cofrinho · Mercado Pago';
   const shown=kind==='pocket'?displayPocket(item.name):item.name;
@@ -274,16 +275,16 @@ function patrimonio(){
   <details class="asset-manage-detail"><summary>Gerenciar</summary>
    <form class="rename-form" data-rename-kind="${kind}" data-rename-id="${esc(item.id)}"><div class="field"><label>Nome de exibição</label><input class="input" name="newName" value="${esc(shown)}" maxlength="80" required></div><div data-rate-set>${rateFields(item,'edit-'+item.id,kind)}</div><button class="btn btn-secondary" type="submit">Salvar cadastro</button></form>
   ${projection.source==='estimated'?`<div class="valuation-details"><div><span>Capital</span><b>${money(projection.principal)}</b></div><div><span>Bruto estimado</span><b>${money(projection.gross)}</b></div><div><span>IR estimado</span><b>− ${money(projection.ir)}</b></div><div><span>IOF estimado</span><b>− ${money(projection.iof)}</b></div><div><span>Elegível a D+0*</span><b>${money(projection.immediatelyAvailable)}</b></div><div><span>Último confirmado</span><b>${maybeMoney(confirmed)} · ${esc(state.snapshot?.date||'sem data')}</b></div></div><p class="hint">*D+0 indica prazo cadastrado; feriados, horários de corte e disponibilidade real não foram verificados. ${projection.approx?'Simulação aproximada; pode divergir do extrato bancário.':'Projeção matemática, não extrato bancário.'}</p>`:`<p class="notice">Projeção indisponível: ${esc(projection.projectionError||'sem dados')}. Valor exibido vem da última posição manual, quando existente.</p>`}
-  <div class="lot-management"><h4>Capital de referência · aportes confirmados</h4><p class="hint">Inclua somente valores efetivamente aplicados que ainda estão investidos. Rascunhos não entram no cálculo. Não conte o mesmo aporte duas vezes.</p>
+  <div class="lot-management"><h4>Capital de referência · aportes confirmados</h4><p class="hint">Inclua somente valores efetivamente aplicados que ainda estão investidos. Aportes locais vinculados também podem compor os lotes. Não conte o mesmo aporte duas vezes.</p>
    ${(item.lots||[]).map(l=>`<div class="lot-line"><span>${money(l.amount)} · ${esc(niceDate(l.date))}</span><button class="mini-link" type="button" data-lot-delete="${esc(l.id)}" data-lot-asset="${esc(item.id)}" data-lot-kind="${kind}">Remover</button></div>`).join('')}
    <form class="lot-form" data-lot-asset="${esc(item.id)}" data-lot-kind="${kind}"><div class="field"><label>Capital ainda aplicado (R$)</label><input class="input" name="amount" inputmode="decimal" placeholder="Ex.: 1000,00" required></div><div class="field"><label>Data do aporte</label><input class="input" name="date" type="date" max="${localISO()}" value="${esc(item.startedAt||localISO())}" required></div><button class="btn btn-secondary" type="submit">Adicionar aporte à base de cálculo</button></form>
    <p class="hint">Resgates ainda exigem ajuste manual da base de cálculo. Não use projeção se houver resgates não refletidos nos aportes acima.</p>
   </div>
    <div class="flex-wrap-row asset-actions"><button class="btn btn-ghost" type="button" data-asset-act="${item.status==='archived'?'reactivate':'archive'}" data-asset-kind="${kind}" data-asset-id="${esc(item.id)}">${item.status==='archived'?'Reativar':'Arquivar'}</button><button class="btn btn-red" type="button" data-asset-act="delete" data-asset-kind="${kind}" data-asset-id="${esc(item.id)}">Excluir cadastro</button></div>
-   <p class="hint">Arquivar oculta do formulário, preservando o histórico. A exclusão definitiva só é permitida quando não há rascunhos vinculados nem saldo.</p>
+   <p class="hint">Arquivar oculta do formulário, preservando o histórico. A exclusão definitiva só é permitida quando não há registros vinculados nem saldo.</p>
   </details></div>`;
  }).join('');
- main.innerHTML=`<div class="page-intro">${label('Organização do patrimônio')}<h1 class="heading">Cofrinhos e investimentos</h1><p class="lede">Cadastros locais. Saldos são posições manuais ou projeções de aportes-base informados; rascunhos não alteram o patrimônio.</p></div>${alert}
+ main.innerHTML=`<div class="page-intro">${label('Organização do patrimônio')}<h1 class="heading">Cofrinhos e investimentos</h1><p class="lede">Cadastros locais. Saldos são posições manuais ou projeções de aportes-base informados; os registros não são conciliados automaticamente com os saldos.</p></div>${alert}
  <div class="card asset-section"><div class="spaced section-title"><span>Cofrinhos ativos</span><button class="mini-link" data-do="snapshot">Editar saldos</button></div>
  ${manager(active(state.pockets),'pocket')||'<p class="small muted">Nenhum cofrinho ativo.</p>'}
  <details class="new-asset"><summary>＋ Criar cofrinho</summary><form id="new-pocket-form"><div class="field"><label>Nome do cofrinho</label><input name="name" class="input" required maxlength="80" placeholder="Ex.: Reserva de emergência"></div><div data-rate-set>${rateFields(null,'create-pocket','pocket')}</div><button class="btn btn-block" type="submit">Cadastrar cofrinho</button></form></details></div>
@@ -412,9 +413,9 @@ function saveEditedDraft(form){const i=state.drafts.findIndex(x=>x.id===editingD
   const nextAsset=d.operation==='cofrinho'?state.pockets.find(x=>x.id===d.pocketId):state.investments.find(x=>x.id===d.investmentId);
   if(nextAsset)nextAsset.lots=[...(nextAsset.lots||[]),{id:newId('lot'),amount:d.amount,date:d.date,sourceDraftId:d.id}];
  }
- state.drafts[i]=d;if(!persist()){state.drafts[i]=prior;for(const x of oldLotMap)x.asset.lots=x.lots;return}editingDraftId=null;notify('Rascunho atualizado.');navigate('rascunhos');}
-function syncLabel(d){const s=d.syncStatus||'LOCAL';return ({IMPORTADO:'Importado anteriormente (origem legada)',REVISAO:'Revisao de migracao pendente',PROCESSANDO:'Status legado: revisar antes de migrar',ENVIANDO:'Status legado: conferir antes de migrar',ERRO:'Status legado incerto: revisar',LOCAL:'Registro somente neste aparelho — NAO enviado ao D1'})[s]||'Registro local';}
-async function syncRecord(){notify('Envio ao D1 desativado nesta versao. Nenhuma operacao foi transmitida.');}
+ state.drafts[i]=d;if(!persist()){state.drafts[i]=prior;for(const x of oldLotMap)x.asset.lots=x.lots;return}editingDraftId=null;notify('Registro atualizado.');navigate('rascunhos');}
+function syncLabel(d){const s=d.syncStatus||'LOCAL';return ({IMPORTADO:'Importado anteriormente (origem legada)',REVISAO:'Revisão de migração pendente',PROCESSANDO:'Status legado: revisar antes de migrar',ENVIANDO:'Status legado: conferir antes de migrar',ERRO:'Status legado incerto: revisar',LOCAL:'Registro somente neste aparelho — não enviado ao D1'})[s]||'Registro local';}
+async function syncRecord(){notify('Envio de registros reais ao D1 desativado nesta versão. Nenhuma operação foi transmitida.');}
 async function readOfficial(){
  const target=document.querySelector('#official-summary');if(!target)return;
  target.textContent='Consultando D1 (somente leitura)...';
@@ -423,10 +424,10 @@ async function readOfficial(){
    apiRequest('/api/accounts'),apiRequest('/api/transactions'),apiRequest('/api/investments'),apiRequest('/api/integrity')
   ]);
   const ac=accounts.accounts||[],tx=transactions.transactions||[],inv=investments.investments||[],bad=integrity.invalidTransactions||[];
-  target.innerHTML=`<div class="notice notice-blue"><b>Banco D1 de HOMOLOGACAO — leitura</b><p>Contas: ${ac.length} · Lancamentos: ${tx.length} · Investimentos: ${inv.length} · Inconsistencias: ${bad.length}</p></div>
+  target.innerHTML=`<div class="notice notice-blue"><b>Banco D1 de HOMOLOGAÇÃO — leitura</b><p>Contas: ${ac.length} · Lançamentos: ${tx.length} · Investimentos: ${inv.length} · Inconsistências: ${bad.length}</p></div>
    ${ac.length?`<p class="small">Contas encontradas:</p>${ac.map(x=>`<p class="small">${esc(x.name)} · ${esc(x.kind)}</p>`).join('')}`:''}
-   ${tx.length?`<p class="small">Ultimos registros:</p>${tx.slice(0,10).map(x=>`<p class="small">${esc(x.effectiveDate)} · ${esc(x.description)} · ${money((x.amountCents||0)/100)}</p>`).join('')}`:'<p class="small muted">Nenhuma movimentacao no D1 ainda. Isso e esperado nesta etapa.</p>'}
-   ${bad.length?'<p class="notice">Foram identificadas inconsistencias contabeis; nao habilite gravacoes.</p>':''}`;
+   ${tx.length?`<p class="small">Últimos registros:</p>${tx.slice(0,10).map(x=>`<p class="small">${esc(x.effectiveDate)} · ${esc(x.description)} · ${money((x.amountCents||0)/100)}</p>`).join('')}`:'<p class="small muted">Nenhuma movimentação no D1 ainda. Isso é esperado nesta etapa.</p>'}
+   ${bad.length?'<p class="notice">Foram identificadas inconsistências contábeis; não habilite gravações.</p>':''}`;
  }catch(e){target.textContent='Falha na consulta: '+String(e.message||e)}
 }
 const TEST_ACCOUNT_NAME='TESTE HML - Conta ficticia';
@@ -448,29 +449,29 @@ async function createD1TestAccount(){
   const existing=await apiRequest('/api/accounts');
   if((existing.accounts||[]).some(x=>x.name===TEST_ACCOUNT_NAME)){
    localStorage.removeItem(TEST_ACCOUNT_KEY);
-   if(el)el.textContent='Conta ficticia ja existe no D1. Nenhuma duplicata criada.';
+   if(el)el.textContent='Conta fictícia já existe no D1. Nenhuma duplicata criada.';
    await readOfficial();return;
   }
   const request=makeTestAccount();
-  if(!confirm('Criar a conta ficticia "'+TEST_ACCOUNT_NAME+'" no banco D1 de HOMOLOGACAO? Nao sera criada movimentacao nem saldo financeiro.')){
+  if(!confirm('Criar a conta fictícia "'+TEST_ACCOUNT_NAME+'" no banco D1 de HOMOLOGAÇÃO? Nenhuma movimentação ou saldo será criado.')){
    if(el)el.textContent='Cadastro cancelado. A chave da tentativa foi preservada.';return;
   }
-  if(el)el.textContent='Enviando conta ficticia ao D1...';
+  if(el)el.textContent='Enviando conta fictícia ao D1...';
   const response=await apiRequest('/api/accounts',{method:'POST',data:request});
   // Confirmar leitura antes de descartar o identificador: respostas perdidas nao devem gerar duplicidade.
   const confirmRead=await apiRequest('/api/accounts');
-  if(!(confirmRead.accounts||[]).some(x=>x.id===response.accountId))throw Error('O servidor respondeu, mas a nova conta ainda nao apareceu. Mantenha a mesma chave e consulte novamente.');
+  if(!(confirmRead.accounts||[]).some(x=>x.id===response.accountId))throw Error('O servidor respondeu, mas a nova conta ainda não apareceu. Mantenha a mesma chave e consulte novamente.');
   localStorage.removeItem(TEST_ACCOUNT_KEY);
-  if(el)el.textContent=response.replayed?'A conta ficticia ja havia sido gravada; resposta recuperada sem duplicacao.':'Conta ficticia gravada e confirmada no D1!';
+  if(el)el.textContent=response.replayed?'A conta fictícia já havia sido gravada; resposta recuperada sem duplicação.':'Conta fictícia gravada e confirmada no D1!';
   await readOfficial();
  }catch(e){
-  if(el)el.textContent='Nao foi possivel confirmar o resultado: '+String(e.message||e)+'. Nao crie outra conta manualmente; esta tentativa manteve sua chave.';
+  if(el)el.textContent='Não foi possível confirmar o resultado: '+String(e.message||e)+'. Não crie outra conta manualmente; esta tentativa manteve sua chave.';
  }finally{if(btn)btn.disabled=false;}
 }
-async function verifyD1(){try{const r=await apiRequest('/api/me');notify(r.authenticated?'Identidade confirmada pelo D1.':'O servidor nao confirmou a identidade.');settings()}catch(e){notify('Falha na verificacao: '+String(e.message||e));settings()}}
-async function createD1Profile(){if(!confirm('Criar seu perfil tecnico no banco D1 de HOMOLOGACAO? Isso nao importa registros nem habilita movimentacoes.'))return;try{await bootstrapProfile();notify('Perfil criado/confirmado no D1.');settings()}catch(e){notify('Falha ao preparar perfil: '+String(e.message||e))}}
+async function verifyD1(){try{const r=await apiRequest('/api/me');notify(r.authenticated?'Identidade confirmada pelo D1.':'O servidor não confirmou a identidade.');settings()}catch(e){notify('Falha na verificação: '+String(e.message||e));settings()}}
+async function createD1Profile(){if(!confirm('Criar seu perfil técnico no banco D1 de HOMOLOGAÇÃO? Isso não importa registros nem habilita movimentações.'))return;try{await bootstrapProfile();notify('Perfil criado/confirmado no D1.');settings()}catch(e){notify('Falha ao preparar perfil: '+String(e.message||e))}}
 function drafts(){
- main.innerHTML=`<div class="page-intro">${label('Neste aparelho')}<h1 class="heading">Registros</h1><p class="lede">Movimentacoes salvas neste aparelho. Ainda nao transmitidas ao banco D1.</p></div>
+ main.innerHTML=`<div class="page-intro">${label('Neste aparelho')}<h1 class="heading">Registros</h1><p class="lede">Movimentações salvas neste aparelho. Ainda não transmitidas ao banco D1.</p></div>
  ${alert}
  <div class="spaced section-title"><span>${state.drafts.length} registro(s)</span><button class="btn btn-ghost" data-do="export" ${state.drafts.length?'':'disabled'}>Exportar JSON</button></div>
  ${state.drafts.length?state.drafts.map(d=>{
@@ -484,7 +485,7 @@ function drafts(){
  
  </div></article>`;
  }).join(''):`<div class="card empty"><div class="symbol">◇</div><b>Nenhum registro local ainda</b><p>Toque em Registrar para criar seu primeiro registro.</p><button class="btn btn-secondary" data-route="registrar">Criar registro</button></div>`}
- <p class="secondary-note">Registros continuam somente neste aparelho. A conexao D1 v1.7 e exclusivamente para login e consultas; nenhum registro local sera enviado automaticamente.</p>`;
+ <p class="secondary-note">Registros continuam somente neste aparelho. A conexão D1 permite login, consultas e testes fictícios explicitamente habilitados; nenhum registro local será enviado automaticamente.</p>`;
 }
 function snapshot(){const s=state.snapshot||{};
  const fixed=[['mp','Saldo livre Mercado Pago'],['inter','Saldo livre Banco Inter'],['cash','Dinheiro em espécie'],['limiteMp','Limite disponível cartão Mercado Pago'],['limiteInter','Limite disponível Banco Inter'],['faturaMp','Fatura atual Mercado Pago'],['faturaInter','Fatura atual Banco Inter']];
@@ -498,26 +499,134 @@ function snapshot(){const s=state.snapshot||{};
   <div class="section-title">Cartões</div>${fixed.slice(3).map(([id,title])=>field(id,title,getPosition(s,id))).join('')}
   <div class="field"><label>Data da posição</label><input type="date" class="input" name="date" value="${esc(s.date||localISO())}"></div><button class="btn btn-block" type="submit">Guardar posição local</button></form>`)}`;
 }
+
+// Testes de homologação v1.9. Os identificadores são salvos ANTES da requisição.
+// Não interferem nos lançamentos locais nem nas posições de patrimônio real.
+const HML_TEST_STORAGE='meu-financeiro-hml-testes-v1.9';
+const HML_TEST_MAIN='TESTE HML - Conta ficticia'; // Identificador técnico legado: não modificar.
+const HML_TEST_AUX='TESTE HML - Conta auxiliar';
+const HML_TEST_CDB='TESTE HML - CDB 120% CDI';
+let hmlLastStep='';
+function savedHmlTests(){try{return JSON.parse(localStorage.getItem(HML_TEST_STORAGE)||'{}')||{}}catch{return {}}}
+function storeHmlTest(step,payload){const s=savedHmlTests();s[step]=payload;localStorage.setItem(HML_TEST_STORAGE,JSON.stringify(s));}
+function operationKey(prefix){if(!crypto?.randomUUID)throw Error('Seu navegador não disponibiliza identificadores seguros.');return 'hml-v19-'+prefix+'-'+crypto.randomUUID()}
+function hmlTestsPanel(pr){
+ const ready=connected()&&pr?.registered;
+ const allowed=ready&&pr?.hmlTests===true&&pr?.financialWrites!==true;
+ return card(`<h3>Homologação D1 · Movimentações fictícias</h3>
+ <p class="small muted">Somente neste painel são permitidos testes de R$ 100,00 (receita), R$ 35,00 (despesa), R$ 20,00 (transferência) e R$ 10,00 (CDB). <b>Não altera contas reais, lançamentos antigos ou a planilha.</b></p>
+ <p class="small"><b>Segurança:</b> ${pr?.financialWrites?'ATENÇÃO: gravações financeiras gerais habilitadas. Interrompa!':pr?.hmlTests?'Testes HML liberados; gravações gerais bloqueadas.':'Testes bloqueados. Configure ENABLE_HML_TESTS=true no Worker, mantendo ENABLE_FINANCIAL_WRITES=false.'}</p>
+ <div class="flex-wrap-row">
+ <button type="button" class="btn btn-secondary" data-do="hml-refresh" ${ready?'':'disabled'}>Consultar saldos fictícios</button>
+ </div>
+ <div class="line"></div>
+ <div class="field"><label>Sequência recomendada</label></div>
+ <div class="flex-wrap-row">
+ <button type="button" class="btn btn-secondary" data-do="hml-step" data-hml-step="aux" ${allowed?'':'disabled'}>1. Preparar conta auxiliar</button>
+ <button type="button" class="btn btn-secondary" data-do="hml-step" data-hml-step="income" ${allowed?'':'disabled'}>2. Receita fictícia · R$ 100</button>
+ <button type="button" class="btn btn-secondary" data-do="hml-step" data-hml-step="expense" ${allowed?'':'disabled'}>3. Despesa fictícia · R$ 35</button>
+ <button type="button" class="btn btn-secondary" data-do="hml-step" data-hml-step="transfer" ${allowed?'':'disabled'}>4. Transferência fictícia · R$ 20</button>
+ <button type="button" class="btn btn-secondary" data-do="hml-step" data-hml-step="investment" ${allowed?'':'disabled'}>5. CDB fictício · R$ 10</button>
+ <button type="button" class="btn btn-ghost" data-do="hml-repeat" ${allowed?'':'disabled'}>6. Reenviar última operação (teste de duplicidade)</button>
+ </div>
+ <div id="hml-test-feedback" class="hint" aria-live="polite">${ready?'Consulte o D1 para conferir os saldos.':'Entre com Google e confirme seu perfil no D1 para continuar.'}</div>
+ <div id="hml-test-summary" aria-live="polite"></div>
+ <p class="hint">Valores exibidos são apenas partidas fictícias do banco de homologação. Não representam dinheiro disponível nem saldos reais. Reenvios reaproveitam a mesma chave de operação.</p>`);
+}
+function summaryHmlText(d){
+ const bankAccounts=d.accounts||[],tx=d.transactions||[],balance=d.balances||[],investments=d.investments||[];
+ const showName=n=>n===HML_TEST_MAIN?'Conta fictícia principal':n===HML_TEST_AUX?'Conta fictícia auxiliar':n;
+ const balanceLines=balance.map(x=>`<div class="spaced"><span>${esc(showName(x.name))}</span><strong>${money(Number(x.balanceCents||0)/100)}</strong></div>`).join('');
+ return `<div class="notice notice-blue"><b>Posição de teste no D1</b>
+ <p>Contas fictícias: ${bankAccounts.length} · Movimentações fictícias: ${tx.length} · Investimentos fictícios: ${investments.length}</p>
+ ${balanceLines||'<p>As contas fictícias ainda não foram encontradas.</p>'}
+ ${investments.map(i=>`<div class="spaced"><span>${esc(i.name)} · capital</span><strong>${money(Number(i.principalCents||0)/100)}</strong></div>`).join('')}
+ <p>Integridade contábil: <strong>${Number(d.invalidTransactions||0)===0?'Sem divergências detectadas':'ATENÇÃO: '+Number(d.invalidTransactions||0)+' inconsistência(s)'}</strong></p>
+ ${tx.length?`<p class="small">Últimas operações: ${tx.slice(0,5).map(t=>esc(t.description)).join(' · ')}</p>`:''}
+ </div>`;
+}
+async function refreshHmlTests(){
+ const target=document.querySelector('#hml-test-summary');
+ if(target)target.textContent='Consultando lançamentos fictícios no D1...';
+ try{const d=await apiRequest('/api/hml/summary');if(target)target.innerHTML=summaryHmlText(d);return d}
+ catch(e){if(target)target.textContent='Não foi possível consultar o D1: '+String(e.message||e);throw e}
+}
+function hmlStepPayload(step,data){
+ const main=data.accounts.find(x=>x.name===HML_TEST_MAIN),aux=data.accounts.find(x=>x.name===HML_TEST_AUX);
+ if(step==='aux')return {kind:'bank',name:HML_TEST_AUX};
+ if(!main||!aux)throw Error('É necessário preparar as duas contas fictícias antes das movimentações.');
+ const date=localISO();
+ if(step==='income')return {kind:'income',description:'TESTE HML - Receita',amountCents:10000,effectiveDate:date,toAccountId:main.id};
+ if(step==='expense')return {kind:'expense',description:'TESTE HML - Despesa',amountCents:3500,effectiveDate:date,fromAccountId:main.id};
+ if(step==='transfer')return {kind:'transfer',description:'TESTE HML - Transferência',amountCents:2000,effectiveDate:date,fromAccountId:main.id,toAccountId:aux.id};
+ if(step==='investment')return {productType:'CDB',name:HML_TEST_CDB,yieldMode:'cdi_pct',contractedRate:'120',appliedOn:date,amountCents:1000,fromAccountId:main.id,liquidity:'grace',graceDays:90,settlementBusinessDays:1,irMode:'regressive',iofApplies:true,institution:'Banco fictício HML'};
+ throw Error('Teste não reconhecido.');
+}
+const HML_STEP_ROUTES={aux:'/api/hml/account',income:'/api/hml/transaction',expense:'/api/hml/transaction',transfer:'/api/hml/transaction',investment:'/api/hml/investment'};
+function hmlWasDone(step,d){
+ if(step==='aux')return (d.accounts||[]).some(x=>x.name===HML_TEST_AUX);
+ if(step==='investment')return (d.investments||[]).some(x=>x.name===HML_TEST_CDB);
+ const desc={income:'TESTE HML - Receita',expense:'TESTE HML - Despesa',transfer:'TESTE HML - Transferência'}[step];
+ return (d.transactions||[]).some(x=>x.description===desc);
+}
+async function doHmlStep(step){
+ const route=HML_STEP_ROUTES[step],status=document.querySelector('#hml-test-feedback');if(!route)return;
+ if(!connected()||profile()?.hmlTests!==true||profile()?.financialWrites===true){notify('Acesso de homologação indisponível. Confira as variáveis do Worker.');return}
+ const btns=[...document.querySelectorAll('[data-hml-step],[data-do="hml-repeat"]')];btns.forEach(b=>b.disabled=true);
+ try{
+  if(status)status.textContent='Conferindo operações existentes no D1...';
+  const d=await apiRequest('/api/hml/summary');
+  const saved=savedHmlTests()[step];
+  if(hmlWasDone(step,d)){
+   hmlLastStep=step;
+   if(status)status.textContent='Operação já consta no D1. Nenhuma nova gravação foi feita. Utilize "Reenviar" para verificar a idempotência, se a chave estiver salva.';
+   await refreshHmlTests();return;
+  }
+  const body=saved||{...hmlStepPayload(step,d),clientOperationId:operationKey(step)};
+  if(!saved)storeHmlTest(step,body); // Persistir a chave antes de enviar.
+  if(!confirm('Confirmar a operação FICTÍCIA "'+step+'" no D1 de HOMOLOGAÇÃO? Não afeta suas finanças reais.')){if(status)status.textContent='Operação cancelada; a chave ficou preservada para a próxima tentativa.';return;}
+  if(status)status.textContent='Conferindo eventual gravação anterior pela chave...';
+  const prior=await apiRequest('/api/hml/result',{method:'POST',data:{clientOperationId:body.clientOperationId}});
+  if(prior.found&&prior.status==='completed'){
+   hmlLastStep=step;if(status)status.textContent='Registro anterior recuperado pela chave, sem duplicação.';
+   await refreshHmlTests();return;
+  }
+  if(prior.found)throw Error('Resultado anterior indefinido. Não será enviada outra operação.');
+  if(status)status.textContent='Registrando operação fictícia...';
+  const created=await apiRequest(route,{method:'POST',data:body});
+  hmlLastStep=step;
+  if(status)status.textContent=created.replayed?'Resposta repetida: mesma operação, sem duplicação.':'Operação gravada. Conferindo a leitura do D1...';
+  await refreshHmlTests();
+ }catch(e){if(status)status.textContent='A gravação não pôde ser confirmada: '+String(e.message||e)+'. A chave foi preservada. Use o mesmo botão para consultar e tentar novamente.';}
+ finally{btns.forEach(b=>b.disabled=false)}
+}
+async function resendHmlOperation(){
+ const step=hmlLastStep||['investment','transfer','expense','income','aux'].find(k=>savedHmlTests()[k]);
+ const saved=savedHmlTests()[step],status=document.querySelector('#hml-test-feedback');
+ if(!step||!saved){if(status)status.textContent='Nenhuma chave de teste está salva neste aparelho.';return}
+ if(!confirm('Reenviar a MESMA operação fictícia e sua chave para verificar a ausência de duplicidade?'))return;
+ try{const answer=await apiRequest(HML_STEP_ROUTES[step],{method:'POST',data:saved});
+  if(status)status.textContent=answer.replayed?'Aprovado: a API reconheceu o reenvio, sem criar uma segunda operação.':'ATENÇÃO: a resposta não indicou replay. Confira a contagem e informe o resultado.';
+  await refreshHmlTests();
+ }catch(e){if(status)status.textContent='Falha no teste de reenvio: '+String(e.message||e)}
+}
+
 function settings(){const pr=profile(),cl=getClientId();
  main.innerHTML=`<div class="page-intro">${label('Seu aplicativo')}<h1 class="heading">Ajustes e privacidade</h1></div>
- ${card(`<div class="kv"><div class="k">Versão</div><div class="v">${VERSION}</div></div><div class="kv"><div class="k">API D1 de homologacao</div><div class="v">Consultas e cadastro de conta ficticia</div></div><div class="kv"><div class="k">Gravacoes financeiras</div><div class="v">Bloqueadas no Worker</div></div><div class="kv"><div class="k">Registros existentes</div><div class="v">Preservados neste aparelho</div></div><div class="line"></div><button class="btn btn-block" data-do="install" id="install-action">Instalar na tela inicial</button><p class="installnote">Android/Chrome: menu ⋮ → Instalar app. Nao remova a instalacao atual nem limpe o armazenamento.</p>`)}
- ${card(`<h3>Google + Cloudflare D1 (HML)</h3><p class="small muted">Servidor publico: ${esc(getApiUrl())}. O identificador OAuth Web e publico e fica salvo apenas neste navegador. Nunca coloque aqui Client Secret ou token.</p>
+ ${card(`<div class="kv"><div class="k">Versão</div><div class="v">${VERSION}</div></div><div class="kv"><div class="k">API D1 de homologação</div><div class="v">Consultas e testes fictícios no D1</div></div><div class="kv"><div class="k">Gravações financeiras</div><div class="v">Gerais bloqueadas; apenas testes fictícios liberados separadamente</div></div><div class="kv"><div class="k">Registros existentes</div><div class="v">Preservados neste aparelho</div></div><div class="line"></div><button class="btn btn-block" data-do="install" id="install-action">Instalar na tela inicial</button><p class="installnote">Android/Chrome: menu ⋮ → Instalar app. Não remova a instalação atual nem limpe o armazenamento.</p>`)}
+ ${card(`<h3>Google + Cloudflare D1 (HML)</h3><p class="small muted">Servidor público: ${esc(getApiUrl())}. O identificador OAuth Web é público e fica salvo apenas neste navegador. Nunca coloque aqui Client Secret ou token.</p>
  <form id="client-id-form"><div class="field"><label for="client-id-input">Client ID OAuth Web do Google</label><input id="client-id-input" name="clientId" class="input" type="text" inputmode="text" autocomplete="off" placeholder="123...apps.googleusercontent.com" value="${esc(cl)}" required></div><button class="btn btn-secondary" type="submit">Salvar Client ID neste aparelho</button></form>
  <div class="line"></div><p class="small"><b>Identidade:</b> <span id="auth-status">${connected()?esc(email())+' — validada pelo Worker':configured()?'Aguardando login Google.':'Configure o Client ID para continuar.'}</span></p>
  <div id="google-login-area" class="login-area"></div>
  <div class="flex-wrap-row mt-14"><button type="button" class="btn btn-secondary" data-do="verify-d1" ${connected()?'':'disabled'}>Verificar acesso</button><button type="button" class="btn btn-secondary" data-do="bootstrap-d1" ${connected()&&!pr?.registered?'':'disabled'}>Preparar meu perfil no D1</button><button type="button" class="btn btn-secondary" data-do="read-d1" ${connected()&&pr?.registered?'':'disabled'}>Consultar D1</button><button type="button" class="btn btn-ghost" data-do="logout">Sair</button></div>
- <p class="hint">${connected()?(pr?.registered?'Perfil cadastrado no D1.':'Identidade validada. Falta preparar perfil tecnico no D1.'):'Os tokens Google nao sao armazenados no backup nem no navegador; sera necessario novo login quando a pagina recarregar.'}</p>
- <div id="official-summary" aria-live="polite"></div><p class="hint">Esta versao nao sincroniza lancamentos financeiros. Apenas o cadastro da conta ficticia e permitido quando liberado no Worker.</p>`)}
- ${card(`<h3>Primeira gravacao no D1 · Conta ficticia</h3>
- <p class="small muted">Teste isolado de homologacao. Cria somente o cadastro de uma conta ficticia, sem lancar receitas, despesas, saldos ou alterar seus registros locais.</p>
- <p class="small"><b>Nome:</b> TESTE HML - Conta ficticia<br><b>Tipo:</b> conta bancaria de teste</p>
- <button type="button" id="account-test-create" class="btn btn-secondary" data-do="create-test-account" ${connected()&&pr?.registered&&pr?.accountSetup?'':'disabled'}>Criar / conferir conta ficticia no D1</button>
- <p id="account-test-feedback" class="hint" role="status">${!connected()?'Entre com Google para testar.':!pr?.registered?'Prepare o perfil no D1.':!pr?.accountSetup?'Ative apenas ENABLE_ACCOUNT_SETUP=true no Worker HML; mantenha ENABLE_FINANCIAL_WRITES=false.':'Cadastro ficticio liberado. Nenhuma transacao financeira sera registrada.'}</p>`)}
- ${card(`<h3>Taxas de referencia (opcional)</h3><p class="small muted">CDI informado manualmente para simulacoes locais. Nao representa saldo bancario.</p><form id="reference-form"><div class="field"><label>CDI anual de referencia (%)</label><input class="input" inputmode="decimal" name="cdiAnnual" placeholder="Ex.: 14,90" value="${esc(state.referenceRates?.cdiAnnual??'')}"></div><div class="field"><label>Data dessa referencia</label><input class="input" type="date" name="cdiUpdatedAt" value="${esc(state.referenceRates?.cdiUpdatedAt||localISO())}"></div><button class="btn btn-secondary" type="submit">Guardar taxa de referencia</button></form>`)}
- ${card(`<h3>Controle dos dados locais</h3><p class="small muted">Limpar dados do navegador os apaga. Faca backup antes de atualizar.</p><div class="flex-wrap-row"><button class="btn btn-secondary" data-do="export">Exportar backup completo</button><label class="btn btn-secondary backup-import" for="backup-file">Restaurar backup</label><input type="file" accept="application/json,.json" id="backup-file" class="sr-only"><button class="btn btn-red" data-do="clear">Apagar dados locais</button></div>`)}
- ${card(`<h3>Limites da homologacao</h3><p class="small muted">A API ainda nao registra ou sincroniza operacoes financeiras do app. Nao lance movimentacoes reais esperando que sejam transmitidas ao D1. Os dados reais continuam locais ate a migracao segura.</p>`)}
+ <p class="hint">${connected()?(pr?.registered?'Perfil cadastrado no D1.':'Identidade validada. Falta preparar perfil técnico no D1.'):'Os tokens Google não são armazenados no backup nem no navegador; será necessário novo login quando a página recarregar.'}</p>
+ <div id="official-summary" aria-live="polite"></div><p class="hint">Esta versão não sincroniza lançamentos financeiros reais. Os testes fictícios usam rotas próprias e autorização separada.</p>`)}
+ ${hmlTestsPanel(pr)}
+ ${card(`<h3>Taxas de referência (opcional)</h3><p class="small muted">CDI informado manualmente para simulações locais. Não representa saldo bancário.</p><form id="reference-form"><div class="field"><label>CDI anual de referência (%)</label><input class="input" inputmode="decimal" name="cdiAnnual" placeholder="Ex.: 14,90" value="${esc(state.referenceRates?.cdiAnnual??'')}"></div><div class="field"><label>Data dessa referência</label><input class="input" type="date" name="cdiUpdatedAt" value="${esc(state.referenceRates?.cdiUpdatedAt||localISO())}"></div><button class="btn btn-secondary" type="submit">Guardar taxa de referência</button></form>`)}
+ ${card(`<h3>Controle dos dados locais</h3><p class="small muted">Limpar dados do navegador apaga os registros. Faça backup antes de atualizar.</p><div class="flex-wrap-row"><button class="btn btn-secondary" data-do="export">Exportar backup completo</button><label class="btn btn-secondary backup-import" for="backup-file">Restaurar backup</label><input type="file" accept="application/json,.json" id="backup-file" class="sr-only"><button class="btn btn-red" data-do="clear">Apagar dados locais</button></div>`)}
+ ${card(`<h3>Limites da homologação</h3><p class="small muted">As movimentações reais continuam locais e não são enviadas ao D1. Somente as operações fictícias do painel de homologação estão habilitadas.</p>`)}
  `;
- const googleEl=document.querySelector('#google-login-area');if(googleEl)mountGoogle(googleEl,()=>{notify('Login Google validado pelo servidor.');settings();},msg=>{notify('Falha no login Google.');const x=document.querySelector('#auth-status');if(x)x.textContent='Nao autorizado: '+msg;});
+ const googleEl=document.querySelector('#google-login-area');if(googleEl)mountGoogle(googleEl,()=>{notify('Login Google validado pelo servidor.');settings();},msg=>{notify('Falha no login Google.');const x=document.querySelector('#auth-status');if(x)x.textContent='Não autorizado: '+msg;});
 }
 
 function saveSnapshot(form){
@@ -539,8 +648,8 @@ function saveSnapshot(form){
  state.snapshot=s;if(!persist()){state.snapshot=original;return}
  notify('Posição manual atualizada.');navigate('inicio');
 }
-function exportData(){const payload={format:'meu-financeiro-pwa-v1.6',createdAt:new Date().toISOString(),warning:'Dados locais, não publicados no controle oficial. Armazene o backup em local seguro.',drafts:state.drafts,snapshot:state.snapshot,pockets:state.pockets,investments:state.investments,referenceRates:state.referenceRates||{}};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='meu-financeiro-backup-v1.6.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200)}
-function clearData(){if(!confirm('Apagar TODOS os rascunhos, saldos e cadastros locais armazenados neste navegador? Isso não afeta a planilha oficial.'))return;state=fresh();persist();notify('Dados locais apagados.');navigate('inicio')}
+function exportData(){if(localStore.blocked){const bytes=localStore.originalBytes;if(typeof bytes!=='string'){notify('Não foi possível acessar os dados para exportar. Não limpe o armazenamento.');return;}const url=URL.createObjectURL(new Blob([bytes],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='meu-financeiro-recuperacao-original.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200);return;}const payload={format:'meu-financeiro-pwa-v1.6',createdAt:new Date().toISOString(),warning:'Dados locais, não publicados no controle oficial. Armazene o backup em local seguro.',drafts:state.drafts,snapshot:state.snapshot,pockets:state.pockets,investments:state.investments,referenceRates:state.referenceRates||{}};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='meu-financeiro-backup-v1.6.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200)}
+function clearData(){notify('Exclusão total bloqueada durante a auditoria. Exporte um backup para preservar seus registros.');return;}
 document.body.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
  if(b.dataset.operation){activeOperation=b.dataset.operation;entryMode='rapido';navigate('registrar');return}
  if(b.dataset.entry){entryMode=b.dataset.entry;register();return}
@@ -556,7 +665,7 @@ document.body.addEventListener('click',e=>{const b=e.target.closest('button');if
   if(!confirm('Excluir este registro e o aporte-base vinculado, quando existir? Isso não estorna operações no banco.'))return;
   for(const a of [...state.pockets,...state.investments])a.lots=(a.lots||[]).filter(l=>l.sourceDraftId!==rec.id);
   state.drafts=state.drafts.filter(d=>d.id!==b.dataset.del);persist();render();notify('Registro local excluído.');return}
- switch(b.dataset.do){case'create-test-account':void createD1TestAccount();return;case'read-d1':void readOfficial();return;case'verify-d1':void verifyD1();return;case'bootstrap-d1':void createD1Profile();return;case'official-summary':void readOfficial();return;case'logout':logoff();settings();return;case'export':exportData();return;case'clear':clearData();return;case'snapshot':route='snapshot';snapshot();return;case'install':if(installedPrompt){installedPrompt.prompt();installedPrompt.userChoice.finally(()=>{installedPrompt=null})}else notify('No Chrome Android: menu ⋮ → Instalar app / Adicionar à tela inicial.');return}
+ switch(b.dataset.do){case'hml-refresh':void refreshHmlTests();return;case'hml-step':void doHmlStep(b.dataset.hmlStep);return;case'hml-repeat':void resendHmlOperation();return;case'create-test-account':void createD1TestAccount();return;case'read-d1':void readOfficial();return;case'verify-d1':void verifyD1();return;case'bootstrap-d1':void createD1Profile();return;case'official-summary':void readOfficial();return;case'logout':logoff();settings();return;case'export':exportData();return;case'clear':clearData();return;case'snapshot':route='snapshot';snapshot();return;case'install':if(installedPrompt){installedPrompt.prompt();installedPrompt.userChoice.finally(()=>{installedPrompt=null})}else notify('No Chrome Android: menu ⋮ → Instalar app / Adicionar à tela inicial.');return}
 });
 document.body.addEventListener('change',e=>{
  if(e.target.matches('#quick-operation')){
@@ -584,7 +693,7 @@ document.body.addEventListener('input',e=>{
 document.body.addEventListener('focusin',e=>{
  if(e.target.matches('[data-centavos]')){const input=e.target;try{input.setSelectionRange(input.value.length,input.value.length)}catch(_){}}
 });
-document.body.addEventListener('submit',e=>{e.preventDefault();if(e.target.id==='client-id-form'){try{storeClientId(new FormData(e.target).get('clientId'));notify('Client ID salvo. Recarregando login...');settings()}catch(err){notify('Client ID invalido: '+String(err.message||err))}}else if(e.target.id==='quick-form')saveQuick(e.target);else if(e.target.id==='natural-form')showInterpret(e.target.querySelector('#natural-text').value);else if(e.target.id==='draft-form')handleSaveDraft(e.target);else if(e.target.id==='query-form')showQuery(e.target.querySelector('#query-text').value);else if(e.target.id==='snapshot-form')saveSnapshot(e.target);else if(e.target.id==='new-pocket-form')createCatalog(e.target,'pocket');else if(e.target.id==='new-investment-form')createCatalog(e.target,'investment');else if(e.target.matches('.rename-form'))renameCatalog(e.target);else if(e.target.matches('.lot-form'))saveLot(e.target);else if(e.target.id==='reference-form')saveReference(e.target);else if(e.target.id==='edit-draft-form')saveEditedDraft(e.target)});
+document.body.addEventListener('submit',e=>{e.preventDefault();if(e.target.id==='client-id-form'){try{storeClientId(new FormData(e.target).get('clientId'));notify('Client ID salvo. Recarregando login...');settings()}catch(err){notify('Client ID inválido: '+String(err.message||err))}}else if(e.target.id==='quick-form')saveQuick(e.target);else if(e.target.id==='natural-form')showInterpret(e.target.querySelector('#natural-text').value);else if(e.target.id==='draft-form')handleSaveDraft(e.target);else if(e.target.id==='query-form')showQuery(e.target.querySelector('#query-text').value);else if(e.target.id==='snapshot-form')saveSnapshot(e.target);else if(e.target.id==='new-pocket-form')createCatalog(e.target,'pocket');else if(e.target.id==='new-investment-form')createCatalog(e.target,'investment');else if(e.target.matches('.rename-form'))renameCatalog(e.target);else if(e.target.matches('.lot-form'))saveLot(e.target);else if(e.target.id==='reference-form')saveReference(e.target);else if(e.target.id==='edit-draft-form')saveEditedDraft(e.target)});
 document.body.addEventListener('change',async e=>{if(e.target.id!=='backup-file')return;const file=e.target.files?.[0];if(!file)return;try{if(file.size>5000000)throw new Error('Arquivo grande demais.');const raw=JSON.parse(await file.text());if(!Array.isArray(raw.drafts)||!Array.isArray(raw.pockets)||!Array.isArray(raw.investments)||!('snapshot'in raw))throw new Error('Formato de backup não reconhecido.');if(raw.drafts.length>50000||raw.pockets.length>1000||raw.investments.length>1000)throw new Error('Arquivo excede os limites de segurança.');if(!confirm(`Restaurar backup com ${raw.drafts.length} registro(s), ${raw.pockets.length} cofrinho(s) e ${raw.investments.length} investimento(s)? Isso substituirá todos os dados locais atuais. Exporte um backup antes.`))return;const backup=state;state=migrate({drafts:raw.drafts,pockets:raw.pockets,investments:raw.investments,snapshot:raw.snapshot,referenceRates:raw.referenceRates||{}});if(!persist()){state=backup;return;}notify('Backup restaurado neste aparelho.');navigate('inicio');}catch(err){notify('Não foi possível restaurar: '+(err.message||'arquivo inválido'));}finally{e.target.value='';}});
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installedPrompt=e});
 window.addEventListener('appinstalled',()=>{installedPrompt=null;notify('Aplicativo adicionado à tela inicial!')});

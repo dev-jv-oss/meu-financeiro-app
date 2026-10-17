@@ -1,0 +1,19 @@
+✔ defaults block financial, account and HML writes (36.885784ms)
+✔ real RS256 validation rejects audience, issuer, expiry, email, verification, sub and signature (13.109162ms)
+✔ atomic balanced expense, replay, hash conflict, concurrent retry and response recovery (21.81774ms)
+D1 batch error injected failure
+✔ injected mid-batch failure rolls back idempotency, transaction, postings and audit; retry keeps key (5.366856ms)
+✔ account ownership prevents writes and reads across users (7.307129ms)
+✔ invalid cent amounts, impossible dates and same-account transfer rejected (10.292743ms)
+✔ future investment maturity is valid; fixed tax above 100 is rejected (5.108675ms)
+✔ pocket mutations blocked until ledger and lot accounting share one transaction (3.146788ms)
+✔ disallowed Origin is rejected before a bootstrap mutation (2.135429ms)
+✔ HML scenario yields 4 transactions and balances 3500/2000/1000 with replay (16.118919ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 207.621339
