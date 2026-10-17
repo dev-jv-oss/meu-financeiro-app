@@ -243,7 +243,7 @@ async function handle(request,env){
  if(pathname==='/api/me'&&method==='GET'){
    const user=await env.DB.prepare('SELECT id,email FROM users WHERE id=?').bind(u).first();return json({authenticated:true,userId:u,registered:!!user,email:identity.email,financialWrites:env.ENABLE_FINANCIAL_WRITES==='true',accountSetup:env.ENABLE_ACCOUNT_SETUP==='true',hmlTests:env.ENABLE_HML_TESTS==='true'&&env.ENABLE_FINANCIAL_WRITES!=='true'});
  }
- if(pathname==='/api/bootstrap'&&method==='POST')return bootstrap(env,identity);
+ if(pathname==='/api/bootstrap'&&method==='POST'){   if(env.ENABLE_ACCOUNT_SETUP!=='true'){     fail(403,'ACCOUNT_SETUP_DISABLED','Cadastro de usuarios desabilitado.');   }   return bootstrap(env,identity); }
  await requireUser(env,identity);
  // Ledger activity and external confirmations are deliberately separate: no implicit opening balance.
  if(pathname==='/api/balances'&&method==='GET'){
